@@ -43,6 +43,14 @@ export default function Home() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const supabaseTypingChannelRef = useRef<any>(null)
 
+  // Refs for values needed inside effects without causing re-subscriptions
+  const isOwnerModeRef = useRef(isOwnerMode)
+  const ownerProfileRef = useRef(ownerProfile)
+  const visitorNameRef = useRef(visitorName)
+  useEffect(() => { isOwnerModeRef.current = isOwnerMode }, [isOwnerMode])
+  useEffect(() => { ownerProfileRef.current = ownerProfile }, [ownerProfile])
+  useEffect(() => { visitorNameRef.current = visitorName }, [visitorName])
+
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
   }
@@ -66,6 +74,8 @@ export default function Home() {
     checkServerOwnerSession()
   }, [])
 
+  // ─── CONNECTION EFFECT (runs ONCE on mount) ───
+  // Uses refs for identity checks so the subscription is never torn down/rebuilt.
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       const mockStore = new MockStore()
@@ -85,10 +95,16 @@ export default function Home() {
         } else if (data.type === 'MESSAGES_UPDATE') {
           setMessages(data.payload)
         } else if (data.type === 'TYPING_EVENT') {
-          if (data.payload.is_typing) {
-            setTypingUser(data.payload.name)
-          } else {
-            setTypingUser(null)
+          // Use ref to get the current identity so the check is always fresh
+          const myName = isOwnerModeRef.current
+            ? ownerProfileRef.current.name
+            : visitorNameRef.current
+          if (data.payload.name !== myName) {
+            if (data.payload.is_typing) {
+              setTypingUser(data.payload.name)
+            } else {
+              setTypingUser(null)
+            }
           }
         }
       })
@@ -151,7 +167,11 @@ export default function Home() {
           })
         })
         .on('broadcast', { event: 'user-typing' }, (payload) => {
-          if (payload.payload && payload.payload.name !== (isOwnerMode ? ownerProfile.name : visitorName)) {
+          // Use ref for fresh identity check — no stale closure
+          const myName = isOwnerModeRef.current
+            ? ownerProfileRef.current.name
+            : visitorNameRef.current
+          if (payload.payload && payload.payload.name !== myName) {
             if (payload.payload.is_typing) {
               setTypingUser(payload.payload.name)
             } else {
@@ -165,18 +185,28 @@ export default function Home() {
 
       return () => { client.removeChannel(roomChannel) }
     }
-  }, [isOwnerMode, ownerProfile.name, visitorName])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // Mark Messages as Seen when viewing a conversation
+  // Mark Messages as Seen when viewing a conversation (debounced to prevent cascading)
+  const markSeenTimerRef = useRef<NodeJS.Timeout | null>(null)
   useEffect(() => {
-    const markSeen = async () => {
+    if (markSeenTimerRef.current) clearTimeout(markSeenTimerRef.current)
+    markSeenTimerRef.current = setTimeout(async () => {
       if (isOwnerMode && selectedVisitor !== 'ALL') {
         const unreadVisitorMsgs = messages.filter(
           (m) => m.sender_type === 'visitor' && m.sender_name.toLowerCase() === selectedVisitor.toLowerCase() && !m.seen
         )
         if (unreadVisitorMsgs.length > 0) {
-          const updated = MockStore.markMessagesAsSeen(selectedVisitor, 'owner')
-          setMessages(updated)
+          MockStore.markMessagesAsSeen(selectedVisitor, 'owner')
+          // Update only the affected messages in-place instead of replacing the whole array
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.sender_type === 'visitor' && m.sender_name.toLowerCase() === selectedVisitor.toLowerCase() && !m.seen
+                ? { ...m, seen: true, seen_at: new Date().toISOString() }
+                : m
+            )
+          )
           if (isSupabaseConfigured && supabase) {
             await supabase
               .from('messages')
@@ -191,8 +221,14 @@ export default function Home() {
           (m) => m.sender_type === 'owner' && (m.recipient_name?.toLowerCase() === visitorName.toLowerCase() || !m.recipient_name) && !m.seen
         )
         if (unreadOwnerMsgs.length > 0) {
-          const updated = MockStore.markMessagesAsSeen(visitorName, 'visitor')
-          setMessages(updated)
+          MockStore.markMessagesAsSeen(visitorName, 'visitor')
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.sender_type === 'owner' && (m.recipient_name?.toLowerCase() === visitorName.toLowerCase() || !m.recipient_name) && !m.seen
+                ? { ...m, seen: true, seen_at: new Date().toISOString() }
+                : m
+            )
+          )
           if (isSupabaseConfigured && supabase) {
             await supabase
               .from('messages')
@@ -202,9 +238,9 @@ export default function Home() {
           }
         }
       }
-    }
+    }, 300) // 300ms debounce prevents cascading re-renders
 
-    markSeen()
+    return () => { if (markSeenTimerRef.current) clearTimeout(markSeenTimerRef.current) }
   }, [messages, selectedVisitor, isOwnerMode, visitorName])
 
   useEffect(() => { scrollToBottom() }, [messages, selectedVisitor, mobileOwnerView, typingUser])
@@ -538,26 +574,40 @@ export default function Home() {
           )}
 
           {/* Messages — Scrollable Viewport */}
-          {displayedMessages.length === 0 ? (
+          {displayedMessages.length === 0 && isOwnerMode ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-8 space-y-3">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#d3e3fd] text-[#1a73e8] flex items-center justify-center">
                 <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
               <h3 className="text-sm sm:text-base font-semibold text-[#1f1f1f]">
-                {isOwnerMode
-                  ? selectedVisitor === 'ALL'
-                    ? 'No messages yet'
-                    : `No messages from ${selectedVisitor}`
-                  : `Send ${ownerProfile.name} a direct message`}
+                {selectedVisitor === 'ALL'
+                  ? 'No messages yet'
+                  : `No messages from ${selectedVisitor}`}
               </h3>
               <p className="text-xs text-[#5f6368] max-w-xs leading-relaxed">
-                {isOwnerMode
-                  ? 'Select another conversation from the sidebar or wait for new messages.'
-                  : "Your messages are private and only visible between you and " + ownerProfile.name + "."}
+                Select another conversation from the sidebar or wait for new messages.
               </p>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-1">
+              {/* Owner welcome message — always shown first for visitors */}
+              {!isOwnerMode && (
+                <div className="flex items-end gap-2 mb-3">
+                  <img
+                    src={ownerProfile.avatarUrl}
+                    alt={ownerProfile.name}
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#e8eaed] shrink-0"
+                  />
+                  <div className="max-w-[75%]">
+                    <span className="text-[10px] text-[#5f6368] ml-1 mb-0.5 block">{ownerProfile.name}</span>
+                    <div className="px-3.5 py-2.5 rounded-2xl rounded-bl-md bg-[#f1f4f8] border border-[#e8eaed] text-[#1f1f1f] text-sm leading-relaxed">
+                      👋 Hi, I&apos;m {ownerProfile.name}. Feel free to drop me a message right here!
+                    </div>
+                    <p className="text-[9px] text-[#9aa0a6] mt-0.5 ml-1">Welcome message</p>
+                  </div>
+                </div>
+              )}
+
               {displayedMessages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
