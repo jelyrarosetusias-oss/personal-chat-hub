@@ -10,13 +10,15 @@ import OwnerProfileModal from '@/components/OwnerProfileModal'
 import OwnerSidebar from '@/components/OwnerSidebar'
 import { MockStore, DirectMessage, OwnerStatus, OwnerProfile, ConversationSummary } from '@/lib/mock-store'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
-import { MessageSquare, ArrowLeft } from 'lucide-react'
+import { MessageSquare, ArrowLeft, Users } from 'lucide-react'
 
 export default function Home() {
   const [messages, setMessages] = useState<DirectMessage[]>([])
   const [visitorName, setVisitorName] = useState<string>('')
   const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false)
   const [selectedVisitor, setSelectedVisitor] = useState<string | 'ALL'>('ALL')
+  const [mobileOwnerView, setMobileOwnerView] = useState<'conversations' | 'chat'>('conversations')
+
   const [ownerProfile, setOwnerProfile] = useState<OwnerProfile>({
     name: 'Darskie',
     bio: 'Software Engineer',
@@ -144,15 +146,47 @@ export default function Home() {
     }
   }, [])
 
-  useEffect(() => { scrollToBottom() }, [messages, selectedVisitor])
+  useEffect(() => { scrollToBottom() }, [messages, selectedVisitor, mobileOwnerView])
 
   const conversations: ConversationSummary[] = MockStore.getConversations(messages)
 
+  // ─── STRICT 1-ON-1 PRIVACY FILTER ───
   const displayedMessages = messages.filter((msg) => {
-    if (!isOwnerMode || selectedVisitor === 'ALL') return true
-    if (msg.sender_type === 'visitor') return msg.sender_name === selectedVisitor
-    if (msg.sender_type === 'owner') return msg.recipient_name === selectedVisitor || !msg.recipient_name
-    return true
+    // 1. OWNER MODE: Filter based on sidebar selection
+    if (isOwnerMode) {
+      if (selectedVisitor === 'ALL') return true
+      if (msg.sender_type === 'visitor') return msg.sender_name.toLowerCase() === selectedVisitor.toLowerCase()
+      if (msg.sender_type === 'owner') return (
+        !msg.recipient_name ||
+        msg.recipient_name === 'Me (Owner)' ||
+        msg.recipient_name.toLowerCase() === selectedVisitor.toLowerCase()
+      )
+      return true
+    }
+
+    // 2. VISITOR MODE (Strict Privacy):
+    // If visitor hasn't entered a name yet, only show general welcome broadcast
+    if (!visitorName) {
+      return msg.sender_type === 'owner' && (!msg.recipient_name || msg.recipient_name === 'Me (Owner)')
+    }
+
+    // If visitor has a name:
+    // A) Visitor's own messages
+    if (msg.sender_type === 'visitor') {
+      return msg.sender_name.toLowerCase() === visitorName.toLowerCase()
+    }
+
+    // B) Owner messages sent to this visitor or general announcements
+    if (msg.sender_type === 'owner') {
+      return (
+        !msg.recipient_name ||
+        msg.recipient_name === 'Me (Owner)' ||
+        msg.recipient_name.toLowerCase() === visitorName.toLowerCase()
+      )
+    }
+
+    // Other visitors' messages are STRICTLY HIDDEN
+    return false
   })
 
   // Current user name for reactions
@@ -221,7 +255,6 @@ export default function Home() {
   const handleReact = async (messageId: string, emoji: string) => {
     if (!currentUserName) return
 
-    // 1. Calculate updated reactions
     const target = messages.find((m) => m.id === messageId)
     if (!target) return
 
@@ -240,34 +273,28 @@ export default function Home() {
       currentReactions[emoji] = [...currentReactors, currentUserName]
     }
 
-    // 2. Update local state
     const updatedMessages = messages.map((m) =>
       m.id === messageId ? { ...m, reactions: currentReactions } : m
     )
     setMessages(updatedMessages)
 
-    // 3. Sync to MockStore
     MockStore.toggleReaction(messageId, emoji, currentUserName)
     if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updatedMessages)
 
-    // 4. Sync to Supabase if configured
     if (isSupabaseConfigured && supabase) {
       await supabase.from('messages').update({ reactions: currentReactions }).eq('id', messageId)
     }
   }
 
   const handleUnsend = async (messageId: string) => {
-    // 1. Update local state
     const updatedMessages = messages.map((m) =>
       m.id === messageId ? { ...m, unsent: true, content: '', media_url: undefined, reactions: {} } : m
     )
     setMessages(updatedMessages)
 
-    // 2. Sync to MockStore
     MockStore.unsendMessage(messageId)
     if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updatedMessages)
 
-    // 3. Sync to Supabase if configured
     if (isSupabaseConfigured && supabase) {
       await supabase
         .from('messages')
@@ -280,6 +307,7 @@ export default function Home() {
     MockStore.setOwnerAuth(true)
     setIsOwnerMode(true)
     setShowOwnerModal(false)
+    setMobileOwnerView('conversations')
     const updatedStatus = MockStore.updateOwnerStatus({ is_online: true, last_active_at: new Date().toISOString() })
     setOwnerStatus(updatedStatus)
     if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_STATUS_UPDATE', updatedStatus)
@@ -309,7 +337,8 @@ export default function Home() {
   }
 
   return (
-    <main className="h-screen flex flex-col max-w-6xl mx-auto p-3 sm:p-6 overflow-hidden">
+    <main className="h-screen flex flex-col max-w-6xl mx-auto p-2 sm:p-6 overflow-hidden">
+      {/* Header */}
       <GoogleHeader
         ownerName={ownerProfile.name}
         ownerBio={ownerProfile.bio}
@@ -322,52 +351,116 @@ export default function Home() {
         onOpenProfileModal={() => setShowProfileModal(true)}
       />
 
-      <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+      {/* Main Container */}
+      <div className="flex-1 flex flex-col md:flex-row gap-3 sm:gap-4 min-h-0 overflow-hidden">
+        {/* Owner Sidebar */}
         {isOwnerMode && (
-          <OwnerSidebar
-            conversations={conversations}
-            selectedVisitor={selectedVisitor}
-            onSelectVisitor={setSelectedVisitor}
-            totalMessagesCount={messages.length}
-          />
+          <div className={`w-full md:w-72 h-full shrink-0 ${mobileOwnerView === 'conversations' ? 'flex' : 'hidden md:flex'}`}>
+            <OwnerSidebar
+              conversations={conversations}
+              selectedVisitor={selectedVisitor}
+              onSelectVisitor={(name) => {
+                setSelectedVisitor(name)
+                setMobileOwnerView('chat')
+              }}
+              totalMessagesCount={messages.length}
+            />
+          </div>
         )}
 
-        <div className="flex-1 md-card flex flex-col min-h-0 overflow-hidden">
-          {/* Thread banner */}
-          {isOwnerMode && selectedVisitor !== 'ALL' && (
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-[#e8eaed] shrink-0">
+        {/* Chat / Message Container */}
+        <div
+          className={`flex-1 md-card flex flex-col min-h-0 overflow-hidden ${
+            isOwnerMode && mobileOwnerView === 'conversations' ? 'hidden md:flex' : 'flex'
+          }`}
+        >
+          {/* Mobile Owner Back Bar / Thread Banner */}
+          {isOwnerMode && (
+            <div className="flex items-center justify-between px-3.5 sm:px-6 py-2.5 border-b border-[#e8eaed] shrink-0 bg-[#f8fafb]">
               <div className="flex items-center gap-2">
-                <button onClick={() => setSelectedVisitor('ALL')} className="p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#5f6368]">
-                  <ArrowLeft className="w-4 h-4" />
+                {/* Mobile Back button */}
+                <button
+                  onClick={() => {
+                    setMobileOwnerView('conversations')
+                    if (selectedVisitor !== 'ALL') setSelectedVisitor('ALL')
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#e8eaed] text-[#3c4043] text-xs font-medium hover:bg-[#dadce0] transition-colors md:hidden"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Conversations</span>
                 </button>
+
+                {/* Desktop Back button */}
+                {selectedVisitor !== 'ALL' && (
+                  <button
+                    onClick={() => setSelectedVisitor('ALL')}
+                    className="hidden md:flex items-center p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#5f6368]"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                )}
+
                 <div>
-                  <h3 className="font-semibold text-sm text-[#1f1f1f]">Conversation with {selectedVisitor}</h3>
-                  <p className="text-[11px] text-[#9aa0a6]">Direct Thread</p>
+                  <h3 className="font-semibold text-xs sm:text-sm text-[#1f1f1f]">
+                    {selectedVisitor === 'ALL' ? 'All Messages' : `Thread with ${selectedVisitor}`}
+                  </h3>
+                  <p className="text-[10px] text-[#9aa0a6]">
+                    {selectedVisitor === 'ALL' ? 'Combined message stream' : 'Direct 1-on-1 Messages'}
+                  </p>
                 </div>
               </div>
-              <button onClick={() => setSelectedVisitor('ALL')} className="text-xs text-[#1a73e8] font-medium hover:underline">
-                Show All
+
+              {selectedVisitor !== 'ALL' && (
+                <button
+                  onClick={() => {
+                    setSelectedVisitor('ALL')
+                    setMobileOwnerView('conversations')
+                  }}
+                  className="text-xs text-[#1a73e8] font-medium hover:underline"
+                >
+                  Show All
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Visitor Info Banner */}
+          {!isOwnerMode && visitorName && (
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[#e8eaed] shrink-0 bg-[#f8fafb] text-xs text-[#5f6368]">
+              <span className="flex items-center gap-1.5 truncate">
+                <span className="w-2 h-2 rounded-full bg-[#1e8e3e]" />
+                Direct 1-on-1 with <strong>{ownerProfile.name}</strong> as <strong className="text-[#1a73e8]">{visitorName}</strong>
+              </span>
+              <button
+                onClick={() => setShowVisitorModal(true)}
+                className="text-[11px] text-[#1a73e8] hover:underline shrink-0 ml-2"
+              >
+                Change Name
               </button>
             </div>
           )}
 
-          {/* Messages — scrollable container */}
+          {/* Messages — Scrollable Viewport */}
           {displayedMessages.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3">
-              <div className="w-14 h-14 rounded-full bg-[#d3e3fd] text-[#1a73e8] flex items-center justify-center">
-                <MessageSquare className="w-7 h-7" />
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-8 space-y-3">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#d3e3fd] text-[#1a73e8] flex items-center justify-center">
+                <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
               </div>
-              <h3 className="text-base font-semibold text-[#1f1f1f]">
-                {isOwnerMode ? `No messages from ${selectedVisitor}` : `Send ${ownerProfile.name} a message`}
+              <h3 className="text-sm sm:text-base font-semibold text-[#1f1f1f]">
+                {isOwnerMode
+                  ? selectedVisitor === 'ALL'
+                    ? 'No messages yet'
+                    : `No messages from ${selectedVisitor}`
+                  : `Send ${ownerProfile.name} a direct message`}
               </h3>
               <p className="text-xs text-[#5f6368] max-w-xs leading-relaxed">
                 {isOwnerMode
-                  ? 'Select another person from the sidebar or wait for new messages.'
-                  : "I've stepped away from social media. Drop me a direct message below!"}
+                  ? 'Select another conversation from the sidebar or wait for new messages.'
+                  : "Your messages are private and only visible between you and " + ownerProfile.name + "."}
               </p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 scroll-smooth">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth">
               {displayedMessages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
@@ -382,21 +475,21 @@ export default function Home() {
             </div>
           )}
 
-          {/* Input — pinned to bottom */}
-          <div className="px-4 sm:px-6 py-4 border-t border-[#e8eaed] shrink-0">
+          {/* Input Box */}
+          <div className="p-3 sm:px-6 sm:py-4 border-t border-[#e8eaed] shrink-0 bg-white">
             <MessageInput
               onSendMessage={handleInitiateSend}
               placeholder={
                 isOwnerMode
                   ? selectedVisitor !== 'ALL' ? `Replying to ${selectedVisitor}...` : `Replying as ${ownerProfile.name}...`
-                  : visitorName ? `Message ${ownerProfile.name} as ${visitorName}...` : `Send ${ownerProfile.name} a direct message...`
+                  : visitorName ? `Message ${ownerProfile.name} as ${visitorName}...` : `Send ${ownerProfile.name} a private message...`
               }
             />
           </div>
         </div>
       </div>
 
-      <div className="text-center text-[11px] text-[#9aa0a6] py-2 font-medium shrink-0">
+      <div className="text-center text-[10px] sm:text-[11px] text-[#9aa0a6] py-1.5 sm:py-2 font-medium shrink-0">
         Direct Messaging Hub • Material Design
       </div>
 

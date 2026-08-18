@@ -38,12 +38,12 @@ export default function OwnerSidebar({
   }
 
   return (
-    <aside className="w-full md:w-72 md-card-flat p-4 flex flex-col gap-3 shrink-0 h-full overflow-hidden">
+    <aside className="w-full md:w-72 md-card p-3 sm:p-4 flex flex-col gap-2.5 sm:gap-3 shrink-0 h-full overflow-hidden">
       {/* Title */}
-      <div className="flex items-center justify-between px-1 pt-1">
+      <div className="flex items-center justify-between px-1 pt-0.5">
         <div className="flex items-center gap-2 text-[#3c4043] font-semibold text-sm">
           <Users className="w-4 h-4 text-[#1a73e8]" />
-          Conversations
+          <span>Conversations</span>
         </div>
         <span className="md-chip-primary md-chip text-[10px]">{conversations.length}</span>
       </div>
@@ -61,7 +61,7 @@ export default function OwnerSidebar({
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto space-y-0.5 pr-0.5">
+      <div className="flex-1 overflow-y-auto space-y-1 pr-0.5 scroll-smooth">
         {/* All Messages */}
         <button
           onClick={() => onSelectVisitor('ALL')}
@@ -71,25 +71,28 @@ export default function OwnerSidebar({
               : 'hover:bg-[#f1f4f8] text-[#3c4043]'
           }`}
         >
-          <div className="flex items-center gap-2.5">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
               selectedVisitor === 'ALL' ? 'bg-[#1a73e8] text-white' : 'bg-[#e8eaed] text-[#5f6368]'
             }`}>
               <Inbox className="w-4 h-4" />
             </div>
-            <div className="text-left">
-              <p className="font-medium">All Messages</p>
-              <p className="text-[10px] text-[#9aa0a6]">Combined feed</p>
+            <div className="text-left min-w-0">
+              <p className="font-medium truncate">All Messages</p>
+              <p className="text-[10px] text-[#9aa0a6] truncate">Combined feed</p>
             </div>
           </div>
-          <span className="md-chip text-[10px]">{totalMessagesCount}</span>
+          <span className="md-chip text-[10px] shrink-0 ml-1">{totalMessagesCount}</span>
         </button>
 
-        <div className="h-px bg-[#e8eaed] my-2 mx-1" />
+        <div className="h-px bg-[#e8eaed] my-1.5 mx-1" />
 
         {/* Visitor Threads */}
         {filteredConversations.length === 0 ? (
-          <div className="p-4 text-center text-xs text-[#9aa0a6]">No conversations yet</div>
+          <div className="p-6 text-center text-xs text-[#9aa0a6] space-y-1">
+            <p className="font-medium text-[#5f6368]">No messages yet</p>
+            <p className="text-[10px]">When visitors reach out, their threads will appear here.</p>
+          </div>
         ) : (
           filteredConversations.map((conv) => {
             const isSelected = selectedVisitor === conv.visitorName
