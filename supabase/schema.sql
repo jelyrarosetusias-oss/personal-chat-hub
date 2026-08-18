@@ -10,8 +10,11 @@ CREATE TABLE IF NOT EXISTS messages (
   avatar_url TEXT,
   content TEXT NOT NULL DEFAULT '',
   media_url TEXT,
+  media_type TEXT DEFAULT 'image',
   reactions JSONB DEFAULT '{}'::jsonb,
   unsent BOOLEAN DEFAULT false,
+  seen BOOLEAN DEFAULT false,
+  seen_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -57,7 +60,7 @@ CREATE POLICY "public update presence" ON owner_presence FOR UPDATE USING (true)
 CREATE POLICY "public update profile" ON owner_profile FOR UPDATE USING (true);
 CREATE POLICY "public insert profile" ON owner_profile FOR INSERT WITH CHECK (true);
 
--- 5. Enable Supabase Realtime for instant multi-device syncing
+-- 5. Enable Supabase Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE owner_presence;
 ALTER PUBLICATION supabase_realtime ADD TABLE owner_profile;

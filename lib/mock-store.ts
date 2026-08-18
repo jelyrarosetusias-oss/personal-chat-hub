@@ -6,8 +6,11 @@ export interface DirectMessage {
   avatar_url?: string
   content: string
   media_url?: string
+  media_type?: 'image' | 'video'
   reactions?: Record<string, string[]> // emoji -> array of reactor names
   unsent?: boolean
+  seen?: boolean
+  seen_at?: string
   created_at: string
 }
 
@@ -29,6 +32,7 @@ export interface ConversationSummary {
   lastTimestamp: string
   avatarUrl: string
   messageCount: number
+  unreadCount: number
 }
 
 const STORAGE_KEY_MESSAGES = 'personal_chat_messages'
@@ -166,6 +170,7 @@ export class MockStore {
           sender_type: 'owner',
           avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
           content: "👋 Hi, I'm Dars. Feel free to drop me a message right here!",
+          seen: true,
           created_at: new Date().toISOString()
         }
       ]
@@ -189,6 +194,29 @@ export class MockStore {
       MockStore.updateOwnerStatus({ last_active_at: new Date().toISOString(), is_online: true })
     }
 
+    return updated
+  }
+
+  static markMessagesAsSeen(visitorName: string, viewerType: 'owner' | 'visitor'): DirectMessage[] {
+    if (typeof window === 'undefined') return []
+    const messages = MockStore.getMessages()
+    let changed = false
+
+    const updated = messages.map((msg) => {
+      if (viewerType === 'owner' && msg.sender_type === 'visitor' && msg.sender_name === visitorName && !msg.seen) {
+        changed = true
+        return { ...msg, seen: true, seen_at: new Date().toISOString() }
+      }
+      if (viewerType === 'visitor' && msg.sender_type === 'owner' && (msg.recipient_name === visitorName || !msg.recipient_name) && !msg.seen) {
+        changed = true
+        return { ...msg, seen: true, seen_at: new Date().toISOString() }
+      }
+      return msg
+    })
+
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(updated))
+    }
     return updated
   }
 
@@ -247,7 +275,14 @@ export class MockStore {
       const avatar = msg.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${name}`
       const existing = map.get(name)
 
-      const displayContent = msg.unsent ? '⚠️ Message unsent' : (msg.media_url && !msg.content ? '📷 [Photo]' : msg.content)
+      let displayContent = msg.content
+      if (msg.unsent) {
+        displayContent = '⚠️ Message unsent'
+      } else if (msg.media_url && !msg.content) {
+        displayContent = msg.media_type === 'video' ? '🎥 [Video]' : '📷 [Photo]'
+      }
+
+      const isUnreadForOwner = msg.sender_type === 'visitor' && !msg.seen
 
       if (!existing) {
         map.set(name, {
@@ -255,12 +290,14 @@ export class MockStore {
           lastMessage: displayContent,
           lastTimestamp: msg.created_at,
           avatarUrl: avatar,
-          messageCount: 1
+          messageCount: 1,
+          unreadCount: isUnreadForOwner ? 1 : 0
         })
       } else {
         existing.lastMessage = displayContent
         existing.lastTimestamp = msg.created_at
         existing.messageCount += 1
+        if (isUnreadForOwner) existing.unreadCount += 1
       }
     })
 

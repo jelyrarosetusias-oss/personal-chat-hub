@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { DirectMessage } from '@/lib/mock-store'
-import { X, Maximize2, Smile, Undo2 } from 'lucide-react'
+import { X, Maximize2, Smile, Undo2, Check, CheckCheck } from 'lucide-react'
 
 const REACTION_EMOJIS = ['❤️', '😂', '👍', '🔥', '😮', '😢']
 
@@ -15,7 +15,7 @@ interface MessageBubbleProps {
 }
 
 export default function MessageBubble({ message, isOwnerView, currentUserName, onReact, onUnsend }: MessageBubbleProps) {
-  const [showFullImage, setShowFullImage] = useState(false)
+  const [showFullMedia, setShowFullMedia] = useState(false)
   const [showReactionPicker, setShowReactionPicker] = useState(false)
   const [showContextMenu, setShowContextMenu] = useState(false)
 
@@ -32,7 +32,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
   }
 
   const defaultAvatar = isOwnerSender
-    ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex'
+    ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars'
     : `https://api.dicebear.com/7.x/bottts/svg?seed=${message.sender_name}`
 
   // Collect all reactions
@@ -60,6 +60,8 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
       </div>
     )
   }
+
+  const isVideo = message.media_type === 'video'
 
   return (
     <div
@@ -91,10 +93,22 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
                 : 'bg-[#f1f4f8] text-[#1f1f1f] rounded-[1.25rem] rounded-bl-[0.375rem] border border-[#e8eaed]'
             }`}
           >
-            {/* Image */}
-            {message.media_url && (
+            {/* Render Video Media */}
+            {message.media_url && isVideo && (
+              <div className="relative rounded-xl overflow-hidden max-w-[280px] bg-black">
+                <video
+                  src={message.media_url}
+                  controls
+                  playsInline
+                  className="w-full max-h-60 rounded-xl"
+                />
+              </div>
+            )}
+
+            {/* Render Image Media */}
+            {message.media_url && !isVideo && (
               <div
-                onClick={() => setShowFullImage(true)}
+                onClick={() => setShowFullMedia(true)}
                 className="relative cursor-pointer rounded-xl overflow-hidden group/img max-w-[280px] border border-black/10"
               >
                 <img
@@ -167,39 +181,56 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
           )}
         </div>
 
-        {/* Reaction Chips */}
-        {reactionEntries.length > 0 && (
-          <div className={`flex flex-wrap gap-1 mt-1 ${isOwnerSender ? 'justify-end' : 'justify-start'}`}>
-            {reactionEntries.map(([emoji, reactors]) => {
-              const hasReacted = reactors.includes(currentUserName)
-              return (
-                <button
-                  key={emoji}
-                  onClick={() => onReact(message.id, emoji)}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all ${
-                    hasReacted
-                      ? 'bg-[#d3e3fd] border-[#1a73e8]/30 text-[#1a73e8]'
-                      : 'bg-[#f1f4f8] border-[#e8eaed] text-[#5f6368] hover:bg-[#e8eaed]'
-                  }`}
-                >
-                  <span>{emoji}</span>
-                  <span className="font-medium text-[10px]">{reactors.length}</span>
-                </button>
-              )
-            })}
-          </div>
-        )}
+        {/* Reaction Chips & Seen Status */}
+        <div className={`flex items-center gap-2 mt-1 w-full ${isOwnerSender ? 'justify-end' : 'justify-start'}`}>
+          {reactionEntries.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {reactionEntries.map(([emoji, reactors]) => {
+                const hasReacted = reactors.includes(currentUserName)
+                return (
+                  <button
+                    key={emoji}
+                    onClick={() => onReact(message.id, emoji)}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all ${
+                      hasReacted
+                        ? 'bg-[#d3e3fd] border-[#1a73e8]/30 text-[#1a73e8]'
+                        : 'bg-[#f1f4f8] border-[#e8eaed] text-[#5f6368] hover:bg-[#e8eaed]'
+                    }`}
+                  >
+                    <span>{emoji}</span>
+                    <span className="font-medium text-[10px]">{reactors.length}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Sent & Seen Status (shown for sender's messages) */}
+          {isMine && (
+            <div className="flex items-center gap-1 text-[10px] text-[#9aa0a6] select-none shrink-0">
+              {message.seen ? (
+                <span className="flex items-center gap-0.5 text-[#1a73e8] font-medium">
+                  <CheckCheck className="w-3 h-3" /> Seen
+                </span>
+              ) : (
+                <span className="flex items-center gap-0.5">
+                  <Check className="w-3 h-3" /> Sent
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Fullsize Image Lightbox */}
-      {showFullImage && message.media_url && (
+      {showFullMedia && message.media_url && !isVideo && (
         <div
-          onClick={() => setShowFullImage(false)}
+          onClick={() => setShowFullMedia(false)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
         >
           <div className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-2xl shadow-2xl">
             <button
-              onClick={() => setShowFullImage(false)}
+              onClick={() => setShowFullMedia(false)}
               className="absolute top-3 right-3 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-10"
             >
               <X className="w-5 h-5" />

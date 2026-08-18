@@ -10,7 +10,7 @@ import OwnerProfileModal from '@/components/OwnerProfileModal'
 import OwnerSidebar from '@/components/OwnerSidebar'
 import { MockStore, DirectMessage, OwnerStatus, OwnerProfile, ConversationSummary } from '@/lib/mock-store'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
-import { MessageSquare, ArrowLeft, Users } from 'lucide-react'
+import { MessageSquare, ArrowLeft } from 'lucide-react'
 
 export default function Home() {
   const [messages, setMessages] = useState<DirectMessage[]>([])
@@ -18,6 +18,7 @@ export default function Home() {
   const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false)
   const [selectedVisitor, setSelectedVisitor] = useState<string | 'ALL'>('ALL')
   const [mobileOwnerView, setMobileOwnerView] = useState<'conversations' | 'chat'>('conversations')
+  const [typingUser, setTypingUser] = useState<string | null>(null)
 
   const [ownerProfile, setOwnerProfile] = useState<OwnerProfile>({
     name: 'Darskie',
@@ -33,11 +34,14 @@ export default function Home() {
   const [showVisitorModal, setShowVisitorModal] = useState<boolean>(false)
   const [pendingText, setPendingText] = useState<string>('')
   const [pendingMedia, setPendingMedia] = useState<string | undefined>(undefined)
+  const [pendingMediaType, setPendingMediaType] = useState<'image' | 'video' | undefined>(undefined)
   const [showOwnerModal, setShowOwnerModal] = useState<boolean>(false)
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const mockStoreRef = useRef<MockStore | null>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const supabaseTypingChannelRef = useRef<any>(null)
 
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
@@ -80,6 +84,12 @@ export default function Home() {
           setOwnerProfile(data.payload)
         } else if (data.type === 'MESSAGES_UPDATE') {
           setMessages(data.payload)
+        } else if (data.type === 'TYPING_EVENT') {
+          if (data.payload.is_typing) {
+            setTypingUser(data.payload.name)
+          } else {
+            setTypingUser(null)
+          }
         }
       })
 
@@ -140,13 +150,64 @@ export default function Home() {
             statusNote: updated.status_note || '',
           })
         })
+        .on('broadcast', { event: 'user-typing' }, (payload) => {
+          if (payload.payload && payload.payload.name !== (isOwnerMode ? ownerProfile.name : visitorName)) {
+            if (payload.payload.is_typing) {
+              setTypingUser(payload.payload.name)
+            } else {
+              setTypingUser(null)
+            }
+          }
+        })
         .subscribe()
+
+      supabaseTypingChannelRef.current = roomChannel
 
       return () => { client.removeChannel(roomChannel) }
     }
-  }, [])
+  }, [isOwnerMode, ownerProfile.name, visitorName])
 
-  useEffect(() => { scrollToBottom() }, [messages, selectedVisitor, mobileOwnerView])
+  // Mark Messages as Seen when viewing a conversation
+  useEffect(() => {
+    const markSeen = async () => {
+      if (isOwnerMode && selectedVisitor !== 'ALL') {
+        const unreadVisitorMsgs = messages.filter(
+          (m) => m.sender_type === 'visitor' && m.sender_name.toLowerCase() === selectedVisitor.toLowerCase() && !m.seen
+        )
+        if (unreadVisitorMsgs.length > 0) {
+          const updated = MockStore.markMessagesAsSeen(selectedVisitor, 'owner')
+          setMessages(updated)
+          if (isSupabaseConfigured && supabase) {
+            await supabase
+              .from('messages')
+              .update({ seen: true, seen_at: new Date().toISOString() })
+              .eq('sender_type', 'visitor')
+              .eq('sender_name', selectedVisitor)
+              .eq('seen', false)
+          }
+        }
+      } else if (!isOwnerMode && visitorName) {
+        const unreadOwnerMsgs = messages.filter(
+          (m) => m.sender_type === 'owner' && (m.recipient_name?.toLowerCase() === visitorName.toLowerCase() || !m.recipient_name) && !m.seen
+        )
+        if (unreadOwnerMsgs.length > 0) {
+          const updated = MockStore.markMessagesAsSeen(visitorName, 'visitor')
+          setMessages(updated)
+          if (isSupabaseConfigured && supabase) {
+            await supabase
+              .from('messages')
+              .update({ seen: true, seen_at: new Date().toISOString() })
+              .eq('sender_type', 'owner')
+              .eq('seen', false)
+          }
+        }
+      }
+    }
+
+    markSeen()
+  }, [messages, selectedVisitor, isOwnerMode, visitorName])
+
+  useEffect(() => { scrollToBottom() }, [messages, selectedVisitor, mobileOwnerView, typingUser])
 
   const conversations: ConversationSummary[] = MockStore.getConversations(messages)
 
@@ -165,18 +226,14 @@ export default function Home() {
     }
 
     // 2. VISITOR MODE (Strict Privacy):
-    // If visitor hasn't entered a name yet, only show general welcome broadcast
     if (!visitorName) {
       return msg.sender_type === 'owner' && (!msg.recipient_name || msg.recipient_name === 'Me (Owner)')
     }
 
-    // If visitor has a name:
-    // A) Visitor's own messages
     if (msg.sender_type === 'visitor') {
       return msg.sender_name.toLowerCase() === visitorName.toLowerCase()
     }
 
-    // B) Owner messages sent to this visitor or general announcements
     if (msg.sender_type === 'owner') {
       return (
         !msg.recipient_name ||
@@ -185,24 +242,58 @@ export default function Home() {
       )
     }
 
-    // Other visitors' messages are STRICTLY HIDDEN
     return false
   })
 
-  // Current user name for reactions
+  // Current user name
   const currentUserName = isOwnerMode ? ownerProfile.name : visitorName
 
-  const handleInitiateSend = (text: string, mediaUrl?: string) => {
+  // Handle Typing indicator event trigger
+  const handleTyping = () => {
+    if (!currentUserName) return
+
+    // Broadcast typing true
+    if (!isSupabaseConfigured || !supabase) {
+      if (mockStoreRef.current) {
+        mockStoreRef.current.sendBroadcast('TYPING_EVENT', { name: currentUserName, is_typing: true })
+      }
+    } else if (supabaseTypingChannelRef.current) {
+      supabaseTypingChannelRef.current.send({
+        type: 'broadcast',
+        event: 'user-typing',
+        payload: { name: currentUserName, is_typing: true }
+      })
+    }
+
+    // Reset timer
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    typingTimeoutRef.current = setTimeout(() => {
+      if (!isSupabaseConfigured || !supabase) {
+        if (mockStoreRef.current) {
+          mockStoreRef.current.sendBroadcast('TYPING_EVENT', { name: currentUserName, is_typing: false })
+        }
+      } else if (supabaseTypingChannelRef.current) {
+        supabaseTypingChannelRef.current.send({
+          type: 'broadcast',
+          event: 'user-typing',
+          payload: { name: currentUserName, is_typing: false }
+        })
+      }
+    }, 2000)
+  }
+
+  const handleInitiateSend = (text: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
     if (isOwnerMode) {
-      executeSend(text, ownerProfile.name, 'owner', selectedVisitor === 'ALL' ? undefined : selectedVisitor, mediaUrl)
+      executeSend(text, ownerProfile.name, 'owner', selectedVisitor === 'ALL' ? undefined : selectedVisitor, mediaUrl, mediaType)
       return
     }
     if (!visitorName) {
       setPendingText(text)
       setPendingMedia(mediaUrl)
+      setPendingMediaType(mediaType)
       setShowVisitorModal(true)
     } else {
-      executeSend(text, visitorName, 'visitor', ownerProfile.name, mediaUrl)
+      executeSend(text, visitorName, 'visitor', ownerProfile.name, mediaUrl, mediaType)
     }
   }
 
@@ -211,9 +302,10 @@ export default function Home() {
     setVisitorName(name)
     setShowVisitorModal(false)
     if (pendingText || pendingMedia) {
-      executeSend(pendingText, name, 'visitor', ownerProfile.name, pendingMedia)
+      executeSend(pendingText, name, 'visitor', ownerProfile.name, pendingMedia, pendingMediaType)
       setPendingText('')
       setPendingMedia(undefined)
+      setPendingMediaType(undefined)
     }
   }
 
@@ -222,7 +314,8 @@ export default function Home() {
     senderName: string,
     senderType: 'visitor' | 'owner',
     recipientName?: string,
-    mediaUrl?: string
+    mediaUrl?: string,
+    mediaType?: 'image' | 'video'
   ) => {
     const newMsg: DirectMessage = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `msg-${Date.now()}`,
@@ -232,6 +325,8 @@ export default function Home() {
       avatar_url: senderType === 'owner' ? ownerProfile.avatarUrl : `https://api.dicebear.com/7.x/bottts/svg?seed=${senderName}`,
       content,
       media_url: mediaUrl,
+      media_type: mediaType || (mediaUrl ? 'image' : undefined),
+      seen: false,
       created_at: new Date().toISOString(),
     }
 
@@ -248,6 +343,8 @@ export default function Home() {
         avatar_url: newMsg.avatar_url,
         content: newMsg.content,
         media_url: newMsg.media_url,
+        media_type: newMsg.media_type,
+        seen: false,
       })
     }
   }
@@ -460,7 +557,7 @@ export default function Home() {
               </p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth">
+            <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-1">
               {displayedMessages.map((msg) => (
                 <MessageBubble
                   key={msg.id}
@@ -471,6 +568,19 @@ export default function Home() {
                   onUnsend={handleUnsend}
                 />
               ))}
+
+              {/* Live Typing Indicator */}
+              {typingUser && (
+                <div className="flex items-center gap-2 my-2 animate-fade-in">
+                  <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-[#f1f4f8] border border-[#e8eaed] text-[#5f6368]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.3s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.15s]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce" />
+                    <span className="text-[11px] font-medium ml-1 text-[#3c4043]">{typingUser} is typing...</span>
+                  </div>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
           )}
@@ -479,6 +589,7 @@ export default function Home() {
           <div className="p-3 sm:px-6 sm:py-4 border-t border-[#e8eaed] shrink-0 bg-white">
             <MessageInput
               onSendMessage={handleInitiateSend}
+              onTyping={handleTyping}
               placeholder={
                 isOwnerMode
                   ? selectedVisitor !== 'ALL' ? `Replying to ${selectedVisitor}...` : `Replying as ${ownerProfile.name}...`

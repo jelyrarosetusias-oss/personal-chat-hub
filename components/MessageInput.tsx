@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
-import { Send, Smile, Paperclip, X } from 'lucide-react'
+import React, { useState, useRef, useEffect } from 'react'
+import { Send, Smile, Paperclip, X, Video, Image as ImageIcon } from 'lucide-react'
 
 interface MessageInputProps {
-  onSendMessage: (text: string, mediaUrl?: string) => void
+  onSendMessage: (text: string, mediaUrl?: string, mediaType?: 'image' | 'video') => void
+  onTyping?: () => void
   placeholder?: string
 }
 
@@ -14,18 +15,24 @@ const EMOJI_CATEGORIES = [
   { name: 'Hearts & Icons', emojis: ['❤️', '💖', '💯', '🚀', '🔒', '👀', '⭐', '🎈'] }
 ]
 
-export default function MessageInput({ onSendMessage, placeholder }: MessageInputProps) {
+export default function MessageInput({ onSendMessage, onTyping, placeholder }: MessageInputProps) {
   const [text, setText] = useState('')
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [mediaType, setMediaType] = useState<'image' | 'video'>('image')
   const [showEmojis, setShowEmojis] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value)
+    if (onTyping) onTyping()
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!text.trim() && !mediaUrl) return
 
-    onSendMessage(text.trim(), mediaUrl || undefined)
+    onSendMessage(text.trim(), mediaUrl || undefined, mediaUrl ? mediaType : undefined)
     setText('')
     setMediaUrl(null)
     setShowEmojis(false)
@@ -34,6 +41,9 @@ export default function MessageInput({ onSendMessage, placeholder }: MessageInpu
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      const isVideo = file.type.startsWith('video/')
+      setMediaType(isVideo ? 'video' : 'image')
+
       const reader = new FileReader()
       reader.onload = (event) => {
         if (event.target?.result) {
@@ -47,18 +57,31 @@ export default function MessageInput({ onSendMessage, placeholder }: MessageInpu
 
   const insertEmoji = (emoji: string) => {
     setText((prev) => prev + emoji)
+    if (onTyping) onTyping()
   }
 
   return (
     <div className="relative w-full space-y-2">
       {/* Attached Media Preview Bar */}
       {mediaUrl && (
-        <div className="flex items-center gap-2 p-2 rounded-2xl bg-[#f1f4f8] border border-[#e8eaed] w-fit">
-          <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-[#dadce0] shrink-0">
-            <img src={mediaUrl} alt="Attachment" className="w-full h-full object-cover" />
+        <div className="flex items-center gap-2.5 p-2 rounded-2xl bg-[#f1f4f8] border border-[#e8eaed] w-fit animate-fade-in">
+          <div className="relative w-14 h-14 rounded-xl overflow-hidden border border-[#dadce0] bg-black flex items-center justify-center shrink-0">
+            {mediaType === 'video' ? (
+              <video src={mediaUrl} className="w-full h-full object-cover" />
+            ) : (
+              <img src={mediaUrl} alt="Attachment" className="w-full h-full object-cover" />
+            )}
+            {mediaType === 'video' && (
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white">
+                <Video className="w-4 h-4" />
+              </div>
+            )}
           </div>
           <div className="pr-2">
-            <p className="text-xs font-medium text-[#1f1f1f]">Photo Attached</p>
+            <p className="text-xs font-medium text-[#1f1f1f] flex items-center gap-1">
+              {mediaType === 'video' ? <Video className="w-3.5 h-3.5 text-[#1a73e8]" /> : <ImageIcon className="w-3.5 h-3.5 text-[#1a73e8]" />}
+              {mediaType === 'video' ? 'Video Attached' : 'Photo Attached'}
+            </p>
             <p className="text-[10px] text-[#5f6368]">Ready to send</p>
           </div>
           <button
@@ -108,7 +131,7 @@ export default function MessageInput({ onSendMessage, placeholder }: MessageInpu
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           className="hidden"
           onChange={handleFileChange}
         />
@@ -116,7 +139,7 @@ export default function MessageInput({ onSendMessage, placeholder }: MessageInpu
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          title="Attach Photo"
+          title="Attach Photo or Video"
           className="p-2.5 rounded-full hover:bg-[#f1f4f8] text-[#5f6368] hover:text-[#1a73e8] transition-colors"
         >
           <Paperclip className="w-4 h-4" />
@@ -126,10 +149,10 @@ export default function MessageInput({ onSendMessage, placeholder }: MessageInpu
           <input
             type="text"
             value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={placeholder || 'Send a message...'}
+            onChange={handleInputChange}
+            placeholder={placeholder || 'Send a message, photo, or video...'}
             maxLength={1000}
-            className="w-full px-5 py-3 pl-11 md-input"
+            className="w-full px-5 py-3 pl-11 md-input text-xs sm:text-sm"
           />
           <button
             type="button"
