@@ -249,6 +249,9 @@ export default function Home() {
 
   // ─── STRICT 1-ON-1 PRIVACY FILTER ───
   const displayedMessages = messages.filter((msg) => {
+    // Hide unsent messages from visitors entirely
+    if (!isOwnerMode && msg.unsent) return false
+
     // 1. OWNER MODE: Filter based on sidebar selection
     if (isOwnerMode) {
       if (selectedVisitor === 'ALL') return true
@@ -261,21 +264,20 @@ export default function Home() {
       return true
     }
 
-    // 2. VISITOR MODE (Strict Privacy):
+    // 2. VISITOR MODE (Strict 1-on-1 Privacy):
+    // New visitor with no name yet: show NO database messages (only the welcome banner is rendered)
     if (!visitorName) {
-      return msg.sender_type === 'owner' && (!msg.recipient_name || msg.recipient_name === 'Me (Owner)')
+      return false
     }
 
+    // Visitor's own messages
     if (msg.sender_type === 'visitor') {
       return msg.sender_name.toLowerCase() === visitorName.toLowerCase()
     }
 
+    // Owner messages targeted specifically to this visitor
     if (msg.sender_type === 'owner') {
-      return (
-        !msg.recipient_name ||
-        msg.recipient_name === 'Me (Owner)' ||
-        msg.recipient_name.toLowerCase() === visitorName.toLowerCase()
-      )
+      return msg.recipient_name?.toLowerCase() === visitorName.toLowerCase()
     }
 
     return false
@@ -451,6 +453,15 @@ export default function Home() {
     MockStore.setOwnerAuth(false)
     setIsOwnerMode(false)
     setSelectedVisitor('ALL')
+
+    // Mark owner as offline and broadcast to all tabs/visitors
+    const offlineStatus = MockStore.updateOwnerStatus({ is_online: false, last_active_at: new Date().toISOString() })
+    setOwnerStatus(offlineStatus)
+    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_STATUS_UPDATE', offlineStatus)
+
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('owner_presence').update({ is_online: false, last_active_at: new Date().toISOString() }).eq('id', 1)
+    }
   }
 
   const handleSaveProfile = async (updated: OwnerProfile) => {

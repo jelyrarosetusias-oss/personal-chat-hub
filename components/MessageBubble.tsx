@@ -63,9 +63,15 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
 
   const isVideo = message.media_type === 'video'
 
+  const handleBubbleClick = (e: React.MouseEvent) => {
+    // Toggle reaction picker on mobile / tap
+    setShowReactionPicker((prev) => !prev)
+    setShowContextMenu(false)
+  }
+
   return (
     <div
-      className={`group flex items-end gap-2.5 my-2.5 ${isOwnerSender ? 'flex-row-reverse' : 'flex-row'}`}
+      className={`group flex items-end gap-2.5 my-2.5 relative ${isOwnerSender ? 'flex-row-reverse' : 'flex-row'}`}
       onMouseLeave={() => { setShowReactionPicker(false); setShowContextMenu(false) }}
     >
       {/* Avatar */}
@@ -76,7 +82,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
       />
 
       {/* Bubble Container */}
-      <div className={`max-w-[78%] sm:max-w-[62%] flex flex-col ${isOwnerSender ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[80%] sm:max-w-[65%] flex flex-col ${isOwnerSender ? 'items-end' : 'items-start'}`}>
         {/* Sender + Time */}
         <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isOwnerSender ? 'flex-row-reverse' : ''}`}>
           <span className="font-semibold text-[#3c4043]">{message.sender_name}</span>
@@ -84,90 +90,63 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
           <span className="text-[#9aa0a6]">{formatTime(message.created_at)}</span>
         </div>
 
-        {/* Bubble + Hover Actions */}
+        {/* Bubble + Actions */}
         <div className="relative">
-          <div
-            className={`p-3 text-[0.8125rem] leading-relaxed break-words space-y-2 ${
-              isOwnerSender
-                ? 'bg-[#1a73e8] text-white rounded-[1.25rem] rounded-br-[0.375rem] shadow-sm'
-                : 'bg-[#f1f4f8] text-[#1f1f1f] rounded-[1.25rem] rounded-bl-[0.375rem] border border-[#e8eaed]'
-            }`}
-          >
-            {/* Render Video Media */}
-            {message.media_url && isVideo && (
-              <div className="relative rounded-xl overflow-hidden max-w-[280px] bg-black">
-                <video
-                  src={message.media_url}
-                  controls
-                  playsInline
-                  className="w-full max-h-60 rounded-xl"
-                />
-              </div>
-            )}
-
-            {/* Render Image Media */}
-            {message.media_url && !isVideo && (
-              <div
-                onClick={() => setShowFullMedia(true)}
-                className="relative cursor-pointer rounded-xl overflow-hidden group/img max-w-[280px] border border-black/10"
-              >
-                <img
-                  src={message.media_url}
-                  alt="Attached Media"
-                  className="w-full max-h-60 object-cover transition-transform group-hover/img:scale-[1.03]"
-                />
-                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
-                  <Maximize2 className="w-5 h-5 drop-shadow-md" />
-                </div>
-              </div>
-            )}
-
-            {/* Text */}
-            {message.content && <div>{message.content}</div>}
-          </div>
-
-          {/* Hover Action Buttons (react + unsend) */}
-          <div className={`absolute top-0 ${isOwnerSender ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'} opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5`}>
-            <button
-              onClick={() => { setShowReactionPicker(!showReactionPicker); setShowContextMenu(false) }}
-              className="p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#9aa0a6] hover:text-[#5f6368] transition-colors"
-              title="React"
-            >
-              <Smile className="w-3.5 h-3.5" />
-            </button>
-            {isMine && (
-              <button
-                onClick={() => { setShowContextMenu(!showContextMenu); setShowReactionPicker(false) }}
-                className="p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#9aa0a6] hover:text-[#5f6368] transition-colors"
-                title="Unsend"
-              >
-                <Undo2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Reaction Picker Popover */}
+          {/* Reaction Picker Popover (iOS / WhatsApp floating style) */}
           {showReactionPicker && (
-            <div className={`absolute bottom-full mb-1 ${isOwnerSender ? 'right-0' : 'left-0'} flex items-center gap-0.5 p-1.5 md-card shadow-lg z-30`}>
-              {REACTION_EMOJIS.map((emoji) => {
-                const reactors = reactions[emoji] || []
-                const hasReacted = reactors.includes(currentUserName)
-                return (
+            <>
+              {/* Invisible backdrop for mobile tap-outside dismiss */}
+              <div
+                className="fixed inset-0 z-20"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowReactionPicker(false)
+                }}
+              />
+
+              <div
+                className={`absolute bottom-full mb-2 ${
+                  isOwnerSender ? 'right-0' : 'left-0'
+                } flex items-center gap-1 p-1.5 bg-white/95 backdrop-blur-md rounded-full border border-[#e8eaed] shadow-xl z-30 animate-in fade-in zoom-in-95 duration-150`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {REACTION_EMOJIS.map((emoji) => {
+                  const reactors = reactions[emoji] || []
+                  const hasReacted = reactors.includes(currentUserName)
+                  return (
+                    <button
+                      key={emoji}
+                      onClick={() => {
+                        onReact(message.id, emoji)
+                        setShowReactionPicker(false)
+                      }}
+                      className={`w-9 h-9 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-lg sm:text-base transition-transform active:scale-125 hover:scale-125 ${
+                        hasReacted ? 'bg-[#d3e3fd]' : 'hover:bg-[#f1f4f8]'
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  )
+                })}
+
+                {/* Mobile Unsend Button inside reaction capsule */}
+                {isMine && (
                   <button
-                    key={emoji}
-                    onClick={() => { onReact(message.id, emoji); setShowReactionPicker(false) }}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all hover:scale-125 ${
-                      hasReacted ? 'bg-[#d3e3fd]' : 'hover:bg-[#f1f4f8]'
-                    }`}
+                    onClick={() => {
+                      onUnsend(message.id)
+                      setShowReactionPicker(false)
+                    }}
+                    className="w-9 h-9 sm:w-8 sm:h-8 ml-0.5 rounded-full flex items-center justify-center text-[#d93025] hover:bg-[#fce8e6] transition-colors"
+                    title="Unsend message"
                   >
-                    {emoji}
+                    <Undo2 className="w-4 h-4" />
                   </button>
-                )
-              })}
-            </div>
+                )}
+              </div>
+            </>
           )}
 
-          {/* Unsend Confirm Popover */}
+          {/* Unsend Confirm Popover (Desktop / Context) */}
           {showContextMenu && isMine && (
             <div className={`absolute bottom-full mb-1 ${isOwnerSender ? 'right-0' : 'left-0'} md-card shadow-lg z-30 p-2 w-40 space-y-1`}>
               <p className="text-[10px] text-[#5f6368] px-2 pb-1 border-b border-[#e8eaed]">Message actions</p>
@@ -179,6 +158,118 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
               </button>
             </div>
           )}
+
+          {/* Chat Bubble - Clickable / Tappable for reactions */}
+          {/* Media-only messages: no colored bubble wrapper */}
+          {message.media_url && !message.content ? (
+            <div onClick={handleBubbleClick} className="cursor-pointer transition-all active:scale-[0.99] select-none">
+              {isVideo ? (
+                <div
+                  className="relative rounded-2xl overflow-hidden max-w-[280px] bg-black shadow-sm"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <video
+                    src={message.media_url}
+                    controls
+                    playsInline
+                    className="w-full max-h-60 rounded-2xl"
+                  />
+                </div>
+              ) : (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowFullMedia(true)
+                  }}
+                  className="relative cursor-pointer rounded-2xl overflow-hidden group/img max-w-[280px] shadow-sm"
+                >
+                  <img
+                    src={message.media_url}
+                    alt="Attached Media"
+                    className="w-full max-h-60 object-cover transition-transform group-hover/img:scale-[1.03] rounded-2xl"
+                  />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white rounded-2xl">
+                    <Maximize2 className="w-5 h-5 drop-shadow-md" />
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              onClick={handleBubbleClick}
+              className={`p-3 text-[0.8125rem] leading-relaxed break-words space-y-2 cursor-pointer transition-all active:scale-[0.99] select-none ${
+                isOwnerSender
+                  ? 'bg-[#1a73e8] text-white rounded-[1.25rem] rounded-br-[0.375rem] shadow-sm'
+                  : 'bg-[#f1f4f8] text-[#1f1f1f] rounded-[1.25rem] rounded-bl-[0.375rem] border border-[#e8eaed]'
+              }`}
+            >
+              {/* Render Video Media (with text) */}
+              {message.media_url && isVideo && (
+                <div
+                  className="relative rounded-xl overflow-hidden max-w-[280px] bg-black"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <video
+                    src={message.media_url}
+                    controls
+                    playsInline
+                    className="w-full max-h-60 rounded-xl"
+                  />
+                </div>
+              )}
+
+              {/* Render Image Media (with text) */}
+              {message.media_url && !isVideo && (
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowFullMedia(true)
+                  }}
+                  className="relative cursor-pointer rounded-xl overflow-hidden group/img max-w-[280px] border border-black/10"
+                >
+                  <img
+                    src={message.media_url}
+                    alt="Attached Media"
+                    className="w-full max-h-60 object-cover transition-transform group-hover/img:scale-[1.03]"
+                  />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
+                    <Maximize2 className="w-5 h-5 drop-shadow-md" />
+                  </div>
+                </div>
+              )}
+
+              {/* Text */}
+              {message.content && <div>{message.content}</div>}
+            </div>
+          )}
+
+          {/* Desktop Hover Action Buttons (react + unsend) */}
+          <div className={`hidden sm:flex absolute top-0 ${isOwnerSender ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'} opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5`}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowReactionPicker(!showReactionPicker)
+                setShowContextMenu(false)
+              }}
+              className="p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#9aa0a6] hover:text-[#5f6368] transition-colors"
+              title="React"
+            >
+              <Smile className="w-3.5 h-3.5" />
+            </button>
+            {isMine && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowContextMenu(!showContextMenu)
+                  setShowReactionPicker(false)
+                }}
+                className="p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#9aa0a6] hover:text-[#5f6368] transition-colors"
+                title="Unsend"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Reaction Chips & Seen Status */}
@@ -190,8 +281,11 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
                 return (
                   <button
                     key={emoji}
-                    onClick={() => onReact(message.id, emoji)}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all ${
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onReact(message.id, emoji)
+                    }}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-all active:scale-95 ${
                       hasReacted
                         ? 'bg-[#d3e3fd] border-[#1a73e8]/30 text-[#1a73e8]'
                         : 'bg-[#f1f4f8] border-[#e8eaed] text-[#5f6368] hover:bg-[#e8eaed]'
