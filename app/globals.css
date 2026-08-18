@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --md-primary: #1a73e8;
+    --md-primary-hover: #1557b0;
+    --md-primary-container: #d3e3fd;
+    --md-on-primary: #ffffff;
+    --md-surface: #f8fafb;
+    --md-surface-container: #ffffff;
+    --md-surface-container-low: #f1f4f8;
+    --md-surface-container-high: #edf0f4;
+    --md-on-surface: #1f1f1f;
+    --md-on-surface-variant: #5f6368;
+    --md-outline: #dadce0;
+    --md-outline-variant: #e8eaed;
+    --md-success: #1e8e3e;
+    --md-error: #d93025;
+    --md-shadow-1: 0 1px 3px rgba(60, 64, 67, 0.08), 0 1px 2px rgba(60, 64, 67, 0.04);
+    --md-shadow-2: 0 1px 6px rgba(60, 64, 67, 0.12), 0 2px 8px rgba(60, 64, 67, 0.06);
+    --md-shadow-3: 0 4px 12px rgba(60, 64, 67, 0.15), 0 2px 6px rgba(60, 64, 67, 0.08);
+  }
+
+  * {
+    border-color: var(--md-outline);
+  }
+
+  body {
+    background-color: var(--md-surface);
+    color: var(--md-on-surface);
+    font-family: var(--font-sans, "Google Sans", "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, sans-serif);
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ─── Material 3 Card ─── */
+.md-card {
+  background: var(--md-surface-container);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 1.25rem;
+  box-shadow: var(--md-shadow-1);
+  transition: box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.md-card:hover {
+  box-shadow: var(--md-shadow-2);
+}
+
+.md-card-flat {
+  background: var(--md-surface-container);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 1.25rem;
+}
+
+/* ─── Material 3 Inputs ─── */
+.md-input {
+  background-color: var(--md-surface-container-low);
+  border: 1.5px solid var(--md-outline);
+  color: var(--md-on-surface);
+  border-radius: 9999px;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  font-size: 0.875rem;
+}
+
+.md-input::placeholder {
+  color: var(--md-on-surface-variant);
+}
+
+.md-input:focus {
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.15);
+  background-color: var(--md-surface-container);
+  outline: none;
+}
+
+/* ─── Material 3 Buttons ─── */
+.md-btn-filled {
+  background-color: var(--md-primary);
+  color: var(--md-on-primary);
+  border-radius: 9999px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  box-shadow: var(--md-shadow-1);
+}
+
+.md-btn-filled:hover {
+  background-color: var(--md-primary-hover);
+  box-shadow: var(--md-shadow-2);
+}
+
+.md-btn-filled:active {
+  transform: scale(0.98);
+}
+
+.md-btn-tonal {
+  background-color: var(--md-primary-container);
+  color: var(--md-primary);
+  border-radius: 9999px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.md-btn-tonal:hover {
+  filter: brightness(0.96);
+}
+
+.md-btn-text {
+  color: var(--md-on-surface-variant);
+  border-radius: 9999px;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+
+.md-btn-text:hover {
+  background-color: var(--md-surface-container-high);
+}
+
+/* ─── Material 3 Chips ─── */
+.md-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  border: 1px solid var(--md-outline);
+  background: var(--md-surface-container);
+  color: var(--md-on-surface-variant);
+  transition: all 0.15s ease;
+}
+
+.md-chip-primary {
+  background: var(--md-primary-container);
+  color: var(--md-primary);
+  border-color: transparent;
+}
+
+.md-chip-success {
+  background: #e6f4ea;
+  color: var(--md-success);
+  border-color: transparent;
+}
+
+/* ─── Online Pulse ─── */
+@keyframes md-pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(30, 142, 62, 0.6); }
+  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(30, 142, 62, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(30, 142, 62, 0); }
+}
+
+.online-pulse {
+  animation: md-pulse 2.4s ease-in-out infinite;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}

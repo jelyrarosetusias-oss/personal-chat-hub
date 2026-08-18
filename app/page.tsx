@@ -1,0 +1,322 @@
+'use client'
+
+import React, { useState, useEffect, useRef } from 'react'
+import GoogleHeader from '@/components/GoogleHeader'
+import MessageBubble from '@/components/MessageBubble'
+import MessageInput from '@/components/MessageInput'
+import VisitorNameModal from '@/components/VisitorNameModal'
+import OwnerLoginModal from '@/components/OwnerLoginModal'
+import OwnerProfileModal from '@/components/OwnerProfileModal'
+import OwnerSidebar from '@/components/OwnerSidebar'
+import { MockStore, DirectMessage, OwnerStatus, OwnerProfile, ConversationSummary } from '@/lib/mock-store'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
+import { MessageSquare, ArrowLeft } from 'lucide-react'
+
+export default function Home() {
+  const [messages, setMessages] = useState<DirectMessage[]>([])
+  const [visitorName, setVisitorName] = useState<string>('')
+  const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false)
+  const [selectedVisitor, setSelectedVisitor] = useState<string | 'ALL'>('ALL')
+  const [ownerProfile, setOwnerProfile] = useState<OwnerProfile>({
+    name: 'Alex Johnson',
+    bio: 'Software Engineer • Direct Communications Hub',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex',
+    statusNote: 'No TikTok/FB/IG — Send direct msgs here',
+  })
+  const [ownerStatus, setOwnerStatus] = useState<OwnerStatus>({
+    is_online: true,
+    last_active_at: new Date().toISOString(),
+  })
+
+  const [showVisitorModal, setShowVisitorModal] = useState<boolean>(false)
+  const [pendingText, setPendingText] = useState<string>('')
+  const [pendingMedia, setPendingMedia] = useState<string | undefined>(undefined)
+  const [showOwnerModal, setShowOwnerModal] = useState<boolean>(false)
+  const [showProfileModal, setShowProfileModal] = useState<boolean>(false)
+
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const mockStoreRef = useRef<MockStore | null>(null)
+
+  const scrollToBottom = (smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
+  }
+
+  useEffect(() => {
+    setVisitorName(MockStore.getVisitorName())
+    setOwnerProfile(MockStore.getOwnerProfile())
+    setOwnerStatus(MockStore.getOwnerStatus())
+
+    const checkServerOwnerSession = async () => {
+      try {
+        const res = await fetch('/api/owner/verify')
+        const data = await res.json()
+        if (data.isOwner) {
+          setIsOwnerMode(true)
+        }
+      } catch {
+        setIsOwnerMode(MockStore.isOwner())
+      }
+    }
+    checkServerOwnerSession()
+  }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      const mockStore = new MockStore()
+      mockStoreRef.current = mockStore
+      setMessages(MockStore.getMessages())
+
+      const cleanup = mockStore.onBroadcast((data) => {
+        if (data.type === 'NEW_DIRECT_MESSAGE') {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === data.payload.id)) return prev
+            return [...prev, data.payload]
+          })
+        } else if (data.type === 'OWNER_STATUS_UPDATE') {
+          setOwnerStatus(data.payload)
+        } else if (data.type === 'OWNER_PROFILE_UPDATE') {
+          setOwnerProfile(data.payload)
+        } else if (data.type === 'MESSAGES_UPDATE') {
+          setMessages(data.payload)
+        }
+      })
+
+      return () => { cleanup() }
+    } else {
+      const client = supabase
+      const fetchMessages = async () => {
+        const { data } = await client.from('messages').select('*').order('created_at', { ascending: true })
+        if (data) setMessages(data as DirectMessage[])
+      }
+      const fetchStatus = async () => {
+        const { data } = await client.from('owner_presence').select('*').single()
+        if (data) setOwnerStatus({ is_online: data.is_online, last_active_at: data.last_active_at })
+      }
+
+      fetchMessages()
+      fetchStatus()
+
+      const roomChannel = client
+        .channel('direct-messaging-room')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+          const newMsg = payload.new as DirectMessage
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev
+            return [...prev, newMsg]
+          })
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'owner_presence' }, (payload) => {
+          const updated = payload.new
+          setOwnerStatus({ is_online: updated.is_online, last_active_at: updated.last_active_at })
+        })
+        .subscribe()
+
+      return () => { client.removeChannel(roomChannel) }
+    }
+  }, [])
+
+  useEffect(() => { scrollToBottom() }, [messages, selectedVisitor])
+
+  const conversations: ConversationSummary[] = MockStore.getConversations(messages)
+
+  const displayedMessages = messages.filter((msg) => {
+    if (!isOwnerMode || selectedVisitor === 'ALL') return true
+    if (msg.sender_type === 'visitor') return msg.sender_name === selectedVisitor
+    if (msg.sender_type === 'owner') return msg.recipient_name === selectedVisitor || !msg.recipient_name
+    return true
+  })
+
+  // Current user name for reactions
+  const currentUserName = isOwnerMode ? ownerProfile.name : visitorName
+
+  const handleInitiateSend = (text: string, mediaUrl?: string) => {
+    if (isOwnerMode) {
+      executeSend(text, ownerProfile.name, 'owner', selectedVisitor === 'ALL' ? undefined : selectedVisitor, mediaUrl)
+      return
+    }
+    if (!visitorName) {
+      setPendingText(text)
+      setPendingMedia(mediaUrl)
+      setShowVisitorModal(true)
+    } else {
+      executeSend(text, visitorName, 'visitor', ownerProfile.name, mediaUrl)
+    }
+  }
+
+  const handleSaveVisitorName = (name: string) => {
+    MockStore.setVisitorName(name)
+    setVisitorName(name)
+    setShowVisitorModal(false)
+    if (pendingText || pendingMedia) {
+      executeSend(pendingText, name, 'visitor', ownerProfile.name, pendingMedia)
+      setPendingText('')
+      setPendingMedia(undefined)
+    }
+  }
+
+  const executeSend = async (
+    content: string,
+    senderName: string,
+    senderType: 'visitor' | 'owner',
+    recipientName?: string,
+    mediaUrl?: string
+  ) => {
+    const newMsg: DirectMessage = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `msg-${Date.now()}`,
+      sender_name: senderName,
+      recipient_name: recipientName,
+      sender_type: senderType,
+      avatar_url: senderType === 'owner' ? ownerProfile.avatarUrl : `https://api.dicebear.com/7.x/bottts/svg?seed=${senderName}`,
+      content,
+      media_url: mediaUrl,
+      created_at: new Date().toISOString(),
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      const updated = MockStore.addMessage(newMsg)
+      setMessages(updated)
+      if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('NEW_DIRECT_MESSAGE', newMsg)
+    } else {
+      await supabase.from('messages').insert({
+        sender_name: newMsg.sender_name,
+        recipient_name: newMsg.recipient_name,
+        sender_type: newMsg.sender_type,
+        avatar_url: newMsg.avatar_url,
+        content: newMsg.content,
+        media_url: newMsg.media_url,
+      })
+    }
+  }
+
+  const handleReact = (messageId: string, emoji: string) => {
+    if (!currentUserName) return
+    const updated = MockStore.toggleReaction(messageId, emoji, currentUserName)
+    setMessages(updated)
+    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updated)
+  }
+
+  const handleUnsend = (messageId: string) => {
+    const updated = MockStore.unsendMessage(messageId)
+    setMessages(updated)
+    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updated)
+  }
+
+  const handleOwnerLoginSuccess = () => {
+    MockStore.setOwnerAuth(true)
+    setIsOwnerMode(true)
+    setShowOwnerModal(false)
+    const updatedStatus = MockStore.updateOwnerStatus({ is_online: true, last_active_at: new Date().toISOString() })
+    setOwnerStatus(updatedStatus)
+    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_STATUS_UPDATE', updatedStatus)
+  }
+
+  const handleOwnerLogout = async () => {
+    try { await fetch('/api/owner/verify', { method: 'DELETE' }) } catch {}
+    MockStore.setOwnerAuth(false)
+    setIsOwnerMode(false)
+    setSelectedVisitor('ALL')
+  }
+
+  const handleSaveProfile = (updated: OwnerProfile) => {
+    setOwnerProfile(updated)
+    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_PROFILE_UPDATE', updated)
+  }
+
+  return (
+    <main className="h-screen flex flex-col max-w-6xl mx-auto p-3 sm:p-6 overflow-hidden">
+      <GoogleHeader
+        ownerName={ownerProfile.name}
+        ownerBio={ownerProfile.bio}
+        ownerAvatarUrl={ownerProfile.avatarUrl}
+        statusNote={ownerProfile.statusNote}
+        isOnline={ownerStatus.is_online}
+        lastActiveAt={ownerStatus.last_active_at}
+        isOwnerMode={isOwnerMode}
+        onToggleOwnerModal={() => isOwnerMode ? handleOwnerLogout() : setShowOwnerModal(true)}
+        onOpenProfileModal={() => setShowProfileModal(true)}
+      />
+
+      <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0 overflow-hidden">
+        {isOwnerMode && (
+          <OwnerSidebar
+            conversations={conversations}
+            selectedVisitor={selectedVisitor}
+            onSelectVisitor={setSelectedVisitor}
+            totalMessagesCount={messages.length}
+          />
+        )}
+
+        <div className="flex-1 md-card flex flex-col min-h-0 overflow-hidden">
+          {/* Thread banner */}
+          {isOwnerMode && selectedVisitor !== 'ALL' && (
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-[#e8eaed] shrink-0">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setSelectedVisitor('ALL')} className="p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#5f6368]">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  <h3 className="font-semibold text-sm text-[#1f1f1f]">Conversation with {selectedVisitor}</h3>
+                  <p className="text-[11px] text-[#9aa0a6]">Direct Thread</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedVisitor('ALL')} className="text-xs text-[#1a73e8] font-medium hover:underline">
+                Show All
+              </button>
+            </div>
+          )}
+
+          {/* Messages — scrollable container */}
+          {displayedMessages.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-3">
+              <div className="w-14 h-14 rounded-full bg-[#d3e3fd] text-[#1a73e8] flex items-center justify-center">
+                <MessageSquare className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-semibold text-[#1f1f1f]">
+                {isOwnerMode ? `No messages from ${selectedVisitor}` : `Send ${ownerProfile.name} a message`}
+              </h3>
+              <p className="text-xs text-[#5f6368] max-w-xs leading-relaxed">
+                {isOwnerMode
+                  ? 'Select another person from the sidebar or wait for new messages.'
+                  : "I've stepped away from social media. Drop me a direct message below!"}
+              </p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 scroll-smooth">
+              {displayedMessages.map((msg) => (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  isOwnerView={isOwnerMode}
+                  currentUserName={currentUserName}
+                  onReact={handleReact}
+                  onUnsend={handleUnsend}
+                />
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+
+          {/* Input — pinned to bottom */}
+          <div className="px-4 sm:px-6 py-4 border-t border-[#e8eaed] shrink-0">
+            <MessageInput
+              onSendMessage={handleInitiateSend}
+              placeholder={
+                isOwnerMode
+                  ? selectedVisitor !== 'ALL' ? `Replying to ${selectedVisitor}...` : `Replying as ${ownerProfile.name}...`
+                  : visitorName ? `Message ${ownerProfile.name} as ${visitorName}...` : `Send ${ownerProfile.name} a direct message...`
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="text-center text-[11px] text-[#9aa0a6] py-2 font-medium shrink-0">
+        Direct Messaging Hub • Material Design
+      </div>
+
+      {showVisitorModal && <VisitorNameModal onSaveName={handleSaveVisitorName} onCancel={() => { setShowVisitorModal(false); setPendingText('') }} />}
+      {showOwnerModal && <OwnerLoginModal onSuccess={handleOwnerLoginSuccess} onClose={() => setShowOwnerModal(false)} />}
+      {showProfileModal && <OwnerProfileModal profile={ownerProfile} onSave={handleSaveProfile} onClose={() => setShowProfileModal(false)} />}
+    </main>
+  )
+}
