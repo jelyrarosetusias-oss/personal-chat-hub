@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     }
 
     // Configured Owner PIN on server env (Defaults to '1234' for local demo)
-    const expectedPin = process.env.OWNER_SECRET_PIN || '1234'
+    const expectedPin = process.env.OWNER_PIN || process.env.OWNER_SECRET_PIN || '1234'
 
     if (pin.trim() !== expectedPin.trim()) {
       // Increment failed attempt count

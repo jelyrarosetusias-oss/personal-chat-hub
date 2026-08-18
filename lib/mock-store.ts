@@ -91,43 +91,33 @@ export class MockStore {
   }
 
   static getOwnerProfile(): OwnerProfile {
-    if (typeof window === 'undefined') {
-      return {
-        name: 'Alex Johnson',
-        bio: 'Software Engineer • Direct Communications Hub',
-        avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex',
-        statusNote: 'No TikTok/FB/IG — Send direct msgs here'
-      }
+    const defaultProfile: OwnerProfile = {
+      name: 'Dars',
+      bio: 'Direct Communications Hub',
+      avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
+      statusNote: 'No TikTok/FB/IG — Send direct msgs here'
     }
+
+    if (typeof window === 'undefined') return defaultProfile
+
     const stored = localStorage.getItem(STORAGE_KEY_OWNER_PROFILE)
     if (!stored) {
-      const defaultProfile: OwnerProfile = {
-        name: 'Alex Johnson',
-        bio: 'Software Engineer • Direct Communications Hub',
-        avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex',
-        statusNote: 'No TikTok/FB/IG — Send direct msgs here'
-      }
       localStorage.setItem(STORAGE_KEY_OWNER_PROFILE, JSON.stringify(defaultProfile))
       return defaultProfile
     }
     try {
       return JSON.parse(stored)
     } catch {
-      return {
-        name: 'Alex Johnson',
-        bio: 'Software Engineer • Direct Communications Hub',
-        avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex',
-        statusNote: 'No TikTok/FB/IG — Send direct msgs here'
-      }
+      return defaultProfile
     }
   }
 
   static updateOwnerProfile(profile: Partial<OwnerProfile>): OwnerProfile {
     if (typeof window === 'undefined') {
       return {
-        name: 'Alex Johnson',
+        name: 'Dars',
         bio: '',
-        avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex',
+        avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
         statusNote: 'No TikTok/FB/IG — Send direct msgs here'
       }
     }
@@ -172,21 +162,11 @@ export class MockStore {
       const defaultWelcome: DirectMessage[] = [
         {
           id: 'welcome-1',
-          sender_name: 'Me (Owner)',
+          sender_name: 'Dars (Owner)',
           sender_type: 'owner',
-          avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex',
-          content: "👋 Hi there! I've deactivated my Facebook, Instagram, and TikTok accounts. Feel free to drop me a message right here!",
-          created_at: new Date(Date.now() - 3600000 * 2).toISOString()
-        },
-        {
-          id: 'sample-visitor-1',
-          sender_name: 'Sarah M.',
-          recipient_name: 'Me (Owner)',
-          sender_type: 'visitor',
-          avatar_url: 'https://api.dicebear.com/7.x/bottts/svg?seed=SarahM',
-          content: 'Hey Alex! Glad I found your direct page. Wanted to catch up with you!',
-          reactions: { '👋': ['Me (Owner)'] },
-          created_at: new Date(Date.now() - 1800000).toISOString()
+          avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
+          content: "👋 Hi, I'm Dars. Feel free to drop me a message right here!",
+          created_at: new Date().toISOString()
         }
       ]
       localStorage.setItem(STORAGE_KEY_MESSAGES, JSON.stringify(defaultWelcome))
@@ -258,7 +238,7 @@ export class MockStore {
       let name = ''
       if (msg.sender_type === 'visitor') {
         name = msg.sender_name
-      } else if (msg.recipient_name && msg.recipient_name !== 'Me (Owner)') {
+      } else if (msg.recipient_name && !msg.recipient_name.includes('Owner')) {
         name = msg.recipient_name
       }
 

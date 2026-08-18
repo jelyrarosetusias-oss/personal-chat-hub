@@ -18,9 +18,9 @@ export default function Home() {
   const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false)
   const [selectedVisitor, setSelectedVisitor] = useState<string | 'ALL'>('ALL')
   const [ownerProfile, setOwnerProfile] = useState<OwnerProfile>({
-    name: 'Alex Johnson',
-    bio: 'Software Engineer • Direct Communications Hub',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-alex',
+    name: 'Dars',
+    bio: 'Direct Communications Hub',
+    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
     statusNote: 'No TikTok/FB/IG — Send direct msgs here',
   })
   const [ownerStatus, setOwnerStatus] = useState<OwnerStatus>({
@@ -105,6 +105,14 @@ export default function Home() {
             return [...prev, newMsg]
           })
         })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+          const updatedMsg = payload.new as DirectMessage
+          setMessages((prev) => prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m)))
+        })
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+          const deletedId = (payload.old as any)?.id
+          if (deletedId) setMessages((prev) => prev.filter((m) => m.id !== deletedId))
+        })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'owner_presence' }, (payload) => {
           const updated = payload.new
           setOwnerStatus({ is_online: updated.is_online, last_active_at: updated.last_active_at })
@@ -178,6 +186,7 @@ export default function Home() {
       if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('NEW_DIRECT_MESSAGE', newMsg)
     } else {
       await supabase.from('messages').insert({
+        id: newMsg.id,
         sender_name: newMsg.sender_name,
         recipient_name: newMsg.recipient_name,
         sender_type: newMsg.sender_type,
@@ -188,17 +197,62 @@ export default function Home() {
     }
   }
 
-  const handleReact = (messageId: string, emoji: string) => {
+  const handleReact = async (messageId: string, emoji: string) => {
     if (!currentUserName) return
-    const updated = MockStore.toggleReaction(messageId, emoji, currentUserName)
-    setMessages(updated)
-    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updated)
+
+    // 1. Calculate updated reactions
+    const target = messages.find((m) => m.id === messageId)
+    if (!target) return
+
+    const currentReactions = { ...(target.reactions || {}) }
+    const currentReactors = currentReactions[emoji] ? [...currentReactions[emoji]] : []
+    const idx = currentReactors.indexOf(currentUserName)
+
+    if (idx >= 0) {
+      currentReactors.splice(idx, 1)
+      if (currentReactors.length === 0) {
+        delete currentReactions[emoji]
+      } else {
+        currentReactions[emoji] = currentReactors
+      }
+    } else {
+      currentReactions[emoji] = [...currentReactors, currentUserName]
+    }
+
+    // 2. Update local state
+    const updatedMessages = messages.map((m) =>
+      m.id === messageId ? { ...m, reactions: currentReactions } : m
+    )
+    setMessages(updatedMessages)
+
+    // 3. Sync to MockStore
+    MockStore.toggleReaction(messageId, emoji, currentUserName)
+    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updatedMessages)
+
+    // 4. Sync to Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('messages').update({ reactions: currentReactions }).eq('id', messageId)
+    }
   }
 
-  const handleUnsend = (messageId: string) => {
-    const updated = MockStore.unsendMessage(messageId)
-    setMessages(updated)
-    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updated)
+  const handleUnsend = async (messageId: string) => {
+    // 1. Update local state
+    const updatedMessages = messages.map((m) =>
+      m.id === messageId ? { ...m, unsent: true, content: '', media_url: undefined, reactions: {} } : m
+    )
+    setMessages(updatedMessages)
+
+    // 2. Sync to MockStore
+    MockStore.unsendMessage(messageId)
+    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updatedMessages)
+
+    // 3. Sync to Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      await supabase
+        .from('messages')
+        .update({ unsent: true, content: '', media_url: null, reactions: {} })
+        .eq('id', messageId)
+    }
   }
 
   const handleOwnerLoginSuccess = () => {
