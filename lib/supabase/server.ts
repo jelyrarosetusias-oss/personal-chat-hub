@@ -1,23 +1,30 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-export const isServerSupabaseConfigured = Boolean(
-  supabaseUrl && 
-  serviceRoleKey && 
-  !supabaseUrl.includes('your-project-id') &&
-  supabaseUrl.startsWith('http')
-)
-
 export const getSupabaseAdmin = () => {
-  if (!isServerSupabaseConfigured) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('Supabase credentials missing:', { hasUrl: Boolean(supabaseUrl), hasKey: Boolean(supabaseKey) })
     return null
   }
-  return createClient(supabaseUrl!, serviceRoleKey!, {
+
+  if (supabaseUrl.includes('your-project-id') || !supabaseUrl.startsWith('http')) {
+    return null
+  }
+
+  return createClient(supabaseUrl, supabaseKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
     }
   })
 }
+
+export const isServerSupabaseConfigured = Boolean(
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL) &&
+  (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY)
+)
