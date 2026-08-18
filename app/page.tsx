@@ -18,10 +18,10 @@ export default function Home() {
   const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false)
   const [selectedVisitor, setSelectedVisitor] = useState<string | 'ALL'>('ALL')
   const [ownerProfile, setOwnerProfile] = useState<OwnerProfile>({
-    name: 'Dars',
-    bio: 'Direct Communications Hub',
+    name: 'Darskie',
+    bio: 'Software Engineer',
     avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
-    statusNote: 'No TikTok/FB/IG — Send direct msgs here',
+    statusNote: 'Send direct msgs here',
   })
   const [ownerStatus, setOwnerStatus] = useState<OwnerStatus>({
     is_online: true,
@@ -92,9 +92,21 @@ export default function Home() {
         const { data } = await client.from('owner_presence').select('*').single()
         if (data) setOwnerStatus({ is_online: data.is_online, last_active_at: data.last_active_at })
       }
+      const fetchProfile = async () => {
+        const { data } = await client.from('owner_profile').select('*').single()
+        if (data) {
+          setOwnerProfile({
+            name: data.name,
+            bio: data.bio || '',
+            avatarUrl: data.avatar_url,
+            statusNote: data.status_note || '',
+          })
+        }
+      }
 
       fetchMessages()
       fetchStatus()
+      fetchProfile()
 
       const roomChannel = client
         .channel('direct-messaging-room')
@@ -116,6 +128,15 @@ export default function Home() {
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'owner_presence' }, (payload) => {
           const updated = payload.new
           setOwnerStatus({ is_online: updated.is_online, last_active_at: updated.last_active_at })
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'owner_profile' }, (payload) => {
+          const updated = payload.new
+          setOwnerProfile({
+            name: updated.name,
+            bio: updated.bio || '',
+            avatarUrl: updated.avatar_url,
+            statusNote: updated.status_note || '',
+          })
         })
         .subscribe()
 
@@ -271,9 +292,20 @@ export default function Home() {
     setSelectedVisitor('ALL')
   }
 
-  const handleSaveProfile = (updated: OwnerProfile) => {
+  const handleSaveProfile = async (updated: OwnerProfile) => {
     setOwnerProfile(updated)
+    MockStore.updateOwnerProfile(updated)
     if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_PROFILE_UPDATE', updated)
+
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('owner_profile').upsert({
+        id: 1,
+        name: updated.name,
+        bio: updated.bio,
+        avatar_url: updated.avatarUrl,
+        status_note: updated.statusNote,
+      })
+    }
   }
 
   return (

@@ -92,10 +92,10 @@ export class MockStore {
 
   static getOwnerProfile(): OwnerProfile {
     const defaultProfile: OwnerProfile = {
-      name: 'Dars',
-      bio: 'Direct Communications Hub',
+      name: 'Darskie',
+      bio: 'Software Engineer',
       avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
-      statusNote: 'No TikTok/FB/IG — Send direct msgs here'
+      statusNote: 'Send direct msgs here'
     }
 
     if (typeof window === 'undefined') return defaultProfile
@@ -115,10 +115,10 @@ export class MockStore {
   static updateOwnerProfile(profile: Partial<OwnerProfile>): OwnerProfile {
     if (typeof window === 'undefined') {
       return {
-        name: 'Dars',
-        bio: '',
+        name: 'Darskie',
+        bio: 'Software Engineer',
         avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
-        statusNote: 'No TikTok/FB/IG — Send direct msgs here'
+        statusNote: 'Send direct msgs here'
       }
     }
     const current = MockStore.getOwnerProfile()
@@ -162,7 +162,7 @@ export class MockStore {
       const defaultWelcome: DirectMessage[] = [
         {
           id: 'welcome-1',
-          sender_name: 'Dars (Owner)',
+          sender_name: 'Darskie (Owner)',
           sender_type: 'owner',
           avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
           content: "👋 Hi, I'm Dars. Feel free to drop me a message right here!",
