@@ -1,26 +1,29 @@
 'use client'
 
 import React, { useState } from 'react'
-import { DirectMessage } from '@/lib/mock-store'
+import { ChatMessage } from '@/lib/types'
 import { X, Maximize2, Smile, Undo2, Check, CheckCheck } from 'lucide-react'
 
 const REACTION_EMOJIS = ['❤️', '😂', '👍', '🔥', '😮', '😢']
 
 interface MessageBubbleProps {
-  message: DirectMessage
-  isOwnerView: boolean
-  currentUserName: string
+  message: ChatMessage
+  currentUserId: string
   onReact: (messageId: string, emoji: string) => void
   onUnsend: (messageId: string) => void
 }
 
-export default function MessageBubble({ message, isOwnerView, currentUserName, onReact, onUnsend }: MessageBubbleProps) {
+export default function MessageBubble({
+  message,
+  currentUserId,
+  onReact,
+  onUnsend
+}: MessageBubbleProps) {
   const [showFullMedia, setShowFullMedia] = useState(false)
   const [showReactionPicker, setShowReactionPicker] = useState(false)
   const [showContextMenu, setShowContextMenu] = useState(false)
 
-  const isOwnerSender = message.sender_type === 'owner'
-  const isMine = isOwnerView ? isOwnerSender : !isOwnerSender
+  const isMine = message.sender_id === currentUserId
 
   const formatTime = (isoString: string) => {
     try {
@@ -31,11 +34,9 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
     }
   }
 
-  const defaultAvatar = isOwnerSender
-    ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars'
-    : `https://api.dicebear.com/7.x/bottts/svg?seed=${message.sender_name}`
+  const defaultAvatar = message.sender_avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.sender_id}`
 
-  // Collect all reactions
+  // Collect reactions
   const reactions = message.reactions || {}
   const reactionEntries = Object.entries(reactions).filter(([, reactors]) => reactors.length > 0)
 
@@ -43,13 +44,13 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
     return (
       <div className={`flex items-end gap-2.5 my-2.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
         <img
-          src={message.avatar_url || defaultAvatar}
-          alt={message.sender_name}
+          src={defaultAvatar}
+          alt={message.sender_name || 'User'}
           className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-[#e8eaed] opacity-40"
         />
         <div className={`max-w-[78%] sm:max-w-[62%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
           <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isMine ? 'flex-row-reverse' : ''}`}>
-            <span className="font-semibold text-[#9aa0a6]">{message.sender_name}</span>
+            <span className="font-semibold text-[#9aa0a6]">{message.sender_name || 'User'}</span>
             <span className="text-[#dadce0]">•</span>
             <span className="text-[#dadce0]">{formatTime(message.created_at)}</span>
           </div>
@@ -64,7 +65,6 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
   const isVideo = message.media_type === 'video'
 
   const handleBubbleClick = (e: React.MouseEvent) => {
-    // Toggle reaction picker on mobile / tap
     setShowReactionPicker((prev) => !prev)
     setShowContextMenu(false)
   }
@@ -76,8 +76,8 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
     >
       {/* Avatar */}
       <img
-        src={message.avatar_url || defaultAvatar}
-        alt={message.sender_name}
+        src={defaultAvatar}
+        alt={message.sender_name || 'Avatar'}
         className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-[#e8eaed]"
       />
 
@@ -85,17 +85,17 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
       <div className={`max-w-[80%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
         {/* Sender + Time */}
         <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isMine ? 'flex-row-reverse' : ''}`}>
-          <span className="font-semibold text-[#3c4043]">{message.sender_name}</span>
+          <span className="font-semibold text-[#3c4043]">{message.sender_name || 'User'}</span>
           <span className="text-[#9aa0a6]">•</span>
           <span className="text-[#9aa0a6]">{formatTime(message.created_at)}</span>
         </div>
 
         {/* Bubble + Actions */}
         <div className="relative">
-          {/* Reaction Picker Popover (iOS / WhatsApp floating style) */}
+          {/* Reaction Picker Popover */}
           {showReactionPicker && (
             <>
-              {/* Invisible backdrop for mobile tap-outside dismiss */}
+              {/* Invisible backdrop for dismiss */}
               <div
                 className="fixed inset-0 z-20"
                 onClick={(e) => {
@@ -112,7 +112,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
               >
                 {REACTION_EMOJIS.map((emoji) => {
                   const reactors = reactions[emoji] || []
-                  const hasReacted = reactors.includes(currentUserName)
+                  const hasReacted = reactors.includes(currentUserId)
                   return (
                     <button
                       key={emoji}
@@ -159,8 +159,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
             </div>
           )}
 
-          {/* Chat Bubble - Clickable / Tappable for reactions */}
-          {/* Media-only messages: no colored bubble wrapper */}
+          {/* Chat Bubble / Media rendering */}
           {message.media_url && !message.content ? (
             <div onClick={handleBubbleClick} className="cursor-pointer transition-all active:scale-[0.99] select-none">
               {isVideo ? (
@@ -277,7 +276,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
           {reactionEntries.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {reactionEntries.map(([emoji, reactors]) => {
-                const hasReacted = reactors.includes(currentUserName)
+                const hasReacted = reactors.includes(currentUserId)
                 return (
                   <button
                     key={emoji}
@@ -299,10 +298,10 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
             </div>
           )}
 
-          {/* Sent & Seen Status (shown for sender's messages) */}
+          {/* Seen Status for sender's messages */}
           {isMine && (
             <div className="flex items-center gap-1 text-[10px] text-[#9aa0a6] select-none shrink-0">
-              {message.seen ? (
+              {message.seen_by && message.seen_by.length > 1 ? (
                 <span className="flex items-center gap-0.5 text-[#1a73e8] font-medium">
                   <CheckCheck className="w-3 h-3" /> Seen
                 </span>

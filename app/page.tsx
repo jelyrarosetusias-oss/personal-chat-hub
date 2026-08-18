@@ -1,434 +1,354 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { UserProfile, Conversation, ChatMessage, MessageRequest } from '@/lib/types'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
+import AuthScreen from '@/components/AuthScreen'
 import GoogleHeader from '@/components/GoogleHeader'
+import ChatSidebar from '@/components/ChatSidebar'
+import ChatHeader from '@/components/ChatHeader'
 import MessageBubble from '@/components/MessageBubble'
 import MessageInput from '@/components/MessageInput'
-import VisitorNameModal from '@/components/VisitorNameModal'
-import OwnerLoginModal from '@/components/OwnerLoginModal'
-import OwnerProfileModal from '@/components/OwnerProfileModal'
-import OwnerSidebar from '@/components/OwnerSidebar'
-import { MockStore, DirectMessage, OwnerStatus, OwnerProfile, ConversationSummary } from '@/lib/mock-store'
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
-import { MessageSquare, ArrowLeft } from 'lucide-react'
+import ProfileModal from '@/components/ProfileModal'
+import CreateGroupModal from '@/components/CreateGroupModal'
+import { MessageSquare, Users, Sparkles, Send, UserPlus } from 'lucide-react'
 
 export default function Home() {
-  const [messages, setMessages] = useState<DirectMessage[]>([])
-  const [visitorName, setVisitorName] = useState<string>('')
-  const [isOwnerMode, setIsOwnerMode] = useState<boolean>(false)
-  const [selectedVisitor, setSelectedVisitor] = useState<string | 'ALL'>('ALL')
-  const [mobileOwnerView, setMobileOwnerView] = useState<'conversations' | 'chat'>('conversations')
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  // Chat State
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [activeConv, setActiveConv] = useState<Conversation | null>(null)
+  const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>('sidebar')
+
+  // Requests State
+  const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
+  const [outgoingRequests, setOutgoingRequests] = useState<MessageRequest[]>([])
+
+  // Modals
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false)
+
+  // Typing state
   const [typingUser, setTypingUser] = useState<string | null>(null)
-
-  const [ownerProfile, setOwnerProfile] = useState<OwnerProfile>({
-    name: 'Darskie',
-    bio: 'Software Engineer',
-    avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=owner-dars',
-    statusNote: 'Send direct msgs here',
-  })
-  const [ownerStatus, setOwnerStatus] = useState<OwnerStatus>({
-    is_online: true,
-    last_active_at: new Date().toISOString(),
-  })
-
-  const [showVisitorModal, setShowVisitorModal] = useState<boolean>(false)
-  const [pendingText, setPendingText] = useState<string>('')
-  const [pendingMedia, setPendingMedia] = useState<string | undefined>(undefined)
-  const [pendingMediaType, setPendingMediaType] = useState<'image' | 'video' | undefined>(undefined)
-  const [showOwnerModal, setShowOwnerModal] = useState<boolean>(false)
-  const [showProfileModal, setShowProfileModal] = useState<boolean>(false)
-
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const mockStoreRef = useRef<MockStore | null>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const supabaseTypingChannelRef = useRef<any>(null)
-
-  // Refs for values needed inside effects without causing re-subscriptions
-  const isOwnerModeRef = useRef(isOwnerMode)
-  const ownerProfileRef = useRef(ownerProfile)
-  const visitorNameRef = useRef(visitorName)
-  useEffect(() => { isOwnerModeRef.current = isOwnerMode }, [isOwnerMode])
-  useEffect(() => { ownerProfileRef.current = ownerProfile }, [ownerProfile])
-  useEffect(() => { visitorNameRef.current = visitorName }, [visitorName])
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const supabaseRoomRef = useRef<any>(null)
 
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
   }
 
-  useEffect(() => {
-    setVisitorName(MockStore.getVisitorName())
-    setOwnerProfile(MockStore.getOwnerProfile())
-    setOwnerStatus(MockStore.getOwnerStatus())
-
-    const checkServerOwnerSession = async () => {
-      try {
-        const res = await fetch('/api/owner/verify')
-        const data = await res.json()
-        if (data.isOwner) {
-          setIsOwnerMode(true)
-        }
-      } catch {
-        setIsOwnerMode(MockStore.isOwner())
+  // 1. Check current authenticated user session
+  const checkSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/session')
+      const data = await res.json()
+      if (data.user) {
+        setCurrentUser(data.user)
+      } else {
+        setCurrentUser(null)
       }
+    } catch {
+      setCurrentUser(null)
+    } finally {
+      setAuthLoading(false)
     }
-    checkServerOwnerSession()
   }, [])
 
-  // ─── CONNECTION EFFECT (runs ONCE on mount) ───
-  // Uses refs for identity checks so the subscription is never torn down/rebuilt.
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
-      const mockStore = new MockStore()
-      mockStoreRef.current = mockStore
-      setMessages(MockStore.getMessages())
+    checkSession()
+  }, [checkSession])
 
-      const cleanup = mockStore.onBroadcast((data) => {
-        if (data.type === 'NEW_DIRECT_MESSAGE') {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === data.payload.id)) return prev
-            return [...prev, data.payload]
-          })
-        } else if (data.type === 'OWNER_STATUS_UPDATE') {
-          setOwnerStatus(data.payload)
-        } else if (data.type === 'OWNER_PROFILE_UPDATE') {
-          setOwnerProfile(data.payload)
-        } else if (data.type === 'MESSAGES_UPDATE') {
-          setMessages(data.payload)
-        } else if (data.type === 'TYPING_EVENT') {
-          // Use ref to get the current identity so the check is always fresh
-          const myName = isOwnerModeRef.current
-            ? ownerProfileRef.current.name
-            : visitorNameRef.current
-          if (data.payload.name !== myName) {
-            if (data.payload.is_typing) {
-              setTypingUser(data.payload.name)
-            } else {
-              setTypingUser(null)
-            }
-          }
+  // 2. Fetch Conversations & Requests
+  const fetchConversations = useCallback(async () => {
+    if (!currentUser) return
+    try {
+      const res = await fetch('/api/conversations')
+      const data = await res.json()
+      if (res.ok && data.conversations) {
+        setConversations(data.conversations)
+      }
+    } catch (err) {
+      console.error('Fetch convs error:', err)
+    }
+  }, [currentUser])
+
+  const fetchRequests = useCallback(async () => {
+    if (!currentUser) return
+    try {
+      const res = await fetch('/api/requests')
+      const data = await res.json()
+      if (res.ok) {
+        setIncomingRequests(data.incoming || [])
+        setOutgoingRequests(data.outgoing || [])
+      }
+    } catch (err) {
+      console.error('Fetch requests error:', err)
+    }
+  }, [currentUser])
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchConversations()
+      fetchRequests()
+    }
+  }, [currentUser, fetchConversations, fetchRequests])
+
+  // 3. Fetch active conversation messages
+  const fetchActiveMessages = useCallback(async (convId: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${convId}`)
+      const data = await res.json()
+      if (res.ok) {
+        setMessages(data.messages || [])
+        if (data.conversation) {
+          setActiveConv(data.conversation)
         }
-      })
+      }
+    } catch (err) {
+      console.error('Fetch active messages error:', err)
+    }
+  }, [])
 
-      return () => { cleanup() }
+  useEffect(() => {
+    if (selectedConvId) {
+      fetchActiveMessages(selectedConvId)
+      setMobileView('chat')
     } else {
-      const client = supabase
-      const fetchMessages = async () => {
-        const { data } = await client.from('messages').select('*').order('created_at', { ascending: true })
-        if (data) setMessages(data as DirectMessage[])
-      }
-      const fetchStatus = async () => {
-        const { data } = await client.from('owner_presence').select('*').single()
-        if (data) setOwnerStatus({ is_online: data.is_online, last_active_at: data.last_active_at })
-      }
-      const fetchProfile = async () => {
-        const { data } = await client.from('owner_profile').select('*').single()
-        if (data) {
-          setOwnerProfile({
-            name: data.name,
-            bio: data.bio || '',
-            avatarUrl: data.avatar_url,
-            statusNote: data.status_note || '',
-          })
-        }
-      }
-
-      fetchMessages()
-      fetchStatus()
-      fetchProfile()
-
-      const roomChannel = client
-        .channel('direct-messaging-room')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-          const newMsg = payload.new as DirectMessage
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev
-            return [...prev, newMsg]
-          })
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-          const updatedMsg = payload.new as DirectMessage
-          setMessages((prev) => prev.map((m) => (m.id === updatedMsg.id ? updatedMsg : m)))
-        })
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-          const deletedId = (payload.old as any)?.id
-          if (deletedId) setMessages((prev) => prev.filter((m) => m.id !== deletedId))
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'owner_presence' }, (payload) => {
-          const updated = payload.new
-          setOwnerStatus({ is_online: updated.is_online, last_active_at: updated.last_active_at })
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'owner_profile' }, (payload) => {
-          const updated = payload.new
-          setOwnerProfile({
-            name: updated.name,
-            bio: updated.bio || '',
-            avatarUrl: updated.avatar_url,
-            statusNote: updated.status_note || '',
-          })
-        })
-        .on('broadcast', { event: 'user-typing' }, (payload) => {
-          // Use ref for fresh identity check — no stale closure
-          const myName = isOwnerModeRef.current
-            ? ownerProfileRef.current.name
-            : visitorNameRef.current
-          if (payload.payload && payload.payload.name !== myName) {
-            if (payload.payload.is_typing) {
-              setTypingUser(payload.payload.name)
-            } else {
-              setTypingUser(null)
-            }
-          }
-        })
-        .subscribe()
-
-      supabaseTypingChannelRef.current = roomChannel
-
-      return () => { client.removeChannel(roomChannel) }
+      setActiveConv(null)
+      setMessages([])
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [selectedConvId, fetchActiveMessages])
 
-  // Mark Messages as Seen when viewing a conversation (debounced to prevent cascading)
-  const markSeenTimerRef = useRef<NodeJS.Timeout | null>(null)
   useEffect(() => {
-    if (markSeenTimerRef.current) clearTimeout(markSeenTimerRef.current)
-    markSeenTimerRef.current = setTimeout(async () => {
-      if (isOwnerMode && selectedVisitor !== 'ALL') {
-        const unreadVisitorMsgs = messages.filter(
-          (m) => m.sender_type === 'visitor' && m.sender_name.toLowerCase() === selectedVisitor.toLowerCase() && !m.seen
-        )
-        if (unreadVisitorMsgs.length > 0) {
-          MockStore.markMessagesAsSeen(selectedVisitor, 'owner')
-          // Update only the affected messages in-place instead of replacing the whole array
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.sender_type === 'visitor' && m.sender_name.toLowerCase() === selectedVisitor.toLowerCase() && !m.seen
-                ? { ...m, seen: true, seen_at: new Date().toISOString() }
-                : m
-            )
-          )
-          if (isSupabaseConfigured && supabase) {
-            await supabase
-              .from('messages')
-              .update({ seen: true, seen_at: new Date().toISOString() })
-              .eq('sender_type', 'visitor')
-              .eq('sender_name', selectedVisitor)
-              .eq('seen', false)
+    scrollToBottom(false)
+  }, [messages, typingUser, selectedConvId])
+
+  // 4. Supabase Realtime Listener
+  useEffect(() => {
+    if (!currentUser || !isSupabaseConfigured || !supabase) return
+
+    const client = supabase
+
+    // Realtime channel for instant message delivery & typing broadcast
+    const channel = client
+      .channel('chat-global-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const newMsg = payload.new as any
+          // If message belongs to active conversation, append it
+          if (newMsg.conversation_id === selectedConvId) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev
+              return [
+                ...prev,
+                {
+                  id: newMsg.id,
+                  conversation_id: newMsg.conversation_id,
+                  sender_id: newMsg.sender_id,
+                  content: newMsg.content,
+                  media_url: newMsg.media_url,
+                  media_type: newMsg.media_type,
+                  reactions: newMsg.reactions || {},
+                  unsent: newMsg.unsent || false,
+                  seen_by: newMsg.seen_by || [],
+                  created_at: newMsg.created_at
+                }
+              ]
+            })
           }
+          // Refresh conversation list to update last message preview
+          fetchConversations()
         }
-      } else if (!isOwnerMode && visitorName) {
-        const unreadOwnerMsgs = messages.filter(
-          (m) => m.sender_type === 'owner' && (m.recipient_name?.toLowerCase() === visitorName.toLowerCase() || !m.recipient_name) && !m.seen
-        )
-        if (unreadOwnerMsgs.length > 0) {
-          MockStore.markMessagesAsSeen(visitorName, 'visitor')
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.sender_type === 'owner' && (m.recipient_name?.toLowerCase() === visitorName.toLowerCase() || !m.recipient_name) && !m.seen
-                ? { ...m, seen: true, seen_at: new Date().toISOString() }
-                : m
-            )
-          )
-          if (isSupabaseConfigured && supabase) {
-            await supabase
-              .from('messages')
-              .update({ seen: true, seen_at: new Date().toISOString() })
-              .eq('sender_type', 'owner')
-              .eq('seen', false)
-          }
-        }
-      }
-    }, 300) // 300ms debounce prevents cascading re-renders
-
-    return () => { if (markSeenTimerRef.current) clearTimeout(markSeenTimerRef.current) }
-  }, [messages, selectedVisitor, isOwnerMode, visitorName])
-
-  useEffect(() => { scrollToBottom() }, [messages, selectedVisitor, mobileOwnerView, typingUser])
-
-  const conversations: ConversationSummary[] = MockStore.getConversations(messages)
-
-  // ─── STRICT 1-ON-1 PRIVACY FILTER ───
-  const displayedMessages = messages.filter((msg) => {
-    // Hide unsent messages from visitors entirely
-    if (!isOwnerMode && msg.unsent) return false
-
-    // 1. OWNER MODE: Filter based on sidebar selection
-    if (isOwnerMode) {
-      if (selectedVisitor === 'ALL') return true
-      if (msg.sender_type === 'visitor') return msg.sender_name.toLowerCase() === selectedVisitor.toLowerCase()
-      if (msg.sender_type === 'owner') return (
-        !msg.recipient_name ||
-        msg.recipient_name === 'Me (Owner)' ||
-        msg.recipient_name.toLowerCase() === selectedVisitor.toLowerCase()
       )
-      return true
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const updated = payload.new as any
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === updated.id
+                ? {
+                    ...m,
+                    content: updated.content,
+                    media_url: updated.media_url,
+                    reactions: updated.reactions || {},
+                    unsent: updated.unsent || false,
+                    seen_by: updated.seen_by || []
+                  }
+                : m
+            )
+          )
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id
+          if (deletedId) {
+            setMessages((prev) => prev.filter((m) => m.id !== deletedId))
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'message_requests' },
+        () => {
+          fetchRequests()
+          fetchConversations()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updatedProfile = payload.new as UserProfile
+          // Update in conversations member list if present
+          setConversations((prev) =>
+            prev.map((c) => ({
+              ...c,
+              members: c.members?.map((m) => (m.id === updatedProfile.id ? { ...m, ...updatedProfile } : m))
+            }))
+          )
+          if (activeConv) {
+            setActiveConv((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    members: prev.members?.map((m) =>
+                      m.id === updatedProfile.id ? { ...m, ...updatedProfile } : m
+                    )
+                  }
+                : null
+            )
+          }
+        }
+      )
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        const { convId, senderName, senderId, isTyping } = payload.payload || {}
+        if (convId === selectedConvId && senderId !== currentUser.id) {
+          setTypingUser(isTyping ? senderName : null)
+        }
+      })
+      .subscribe()
+
+    supabaseRoomRef.current = channel
+
+    return () => {
+      client.removeChannel(channel)
     }
+  }, [currentUser, selectedConvId, activeConv, fetchConversations, fetchRequests])
 
-    // 2. VISITOR MODE (Strict 1-on-1 Privacy):
-    // New visitor with no name yet: show NO database messages (only the welcome banner is rendered)
-    if (!visitorName) {
-      return false
-    }
-
-    // Visitor's own messages
-    if (msg.sender_type === 'visitor') {
-      return msg.sender_name.toLowerCase() === visitorName.toLowerCase()
-    }
-
-    // Owner messages targeted specifically to this visitor
-    if (msg.sender_type === 'owner') {
-      return msg.recipient_name?.toLowerCase() === visitorName.toLowerCase()
-    }
-
-    return false
-  })
-
-  // Current user name
-  const currentUserName = isOwnerMode ? ownerProfile.name : visitorName
-
-  // Handle Typing indicator event trigger
+  // 5. Typing Indicator Trigger
   const handleTyping = () => {
-    if (!currentUserName) return
+    if (!currentUser || !selectedConvId) return
 
-    // Broadcast typing true
-    if (!isSupabaseConfigured || !supabase) {
-      if (mockStoreRef.current) {
-        mockStoreRef.current.sendBroadcast('TYPING_EVENT', { name: currentUserName, is_typing: true })
-      }
-    } else if (supabaseTypingChannelRef.current) {
-      supabaseTypingChannelRef.current.send({
+    if (supabaseRoomRef.current) {
+      supabaseRoomRef.current.send({
         type: 'broadcast',
-        event: 'user-typing',
-        payload: { name: currentUserName, is_typing: true }
+        event: 'typing',
+        payload: {
+          convId: selectedConvId,
+          senderName: currentUser.display_name,
+          senderId: currentUser.id,
+          isTyping: true
+        }
       })
     }
 
-    // Reset timer
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     typingTimeoutRef.current = setTimeout(() => {
-      if (!isSupabaseConfigured || !supabase) {
-        if (mockStoreRef.current) {
-          mockStoreRef.current.sendBroadcast('TYPING_EVENT', { name: currentUserName, is_typing: false })
-        }
-      } else if (supabaseTypingChannelRef.current) {
-        supabaseTypingChannelRef.current.send({
+      if (supabaseRoomRef.current) {
+        supabaseRoomRef.current.send({
           type: 'broadcast',
-          event: 'user-typing',
-          payload: { name: currentUserName, is_typing: false }
+          event: 'typing',
+          payload: {
+            convId: selectedConvId,
+            senderName: currentUser.display_name,
+            senderId: currentUser.id,
+            isTyping: false
+          }
         })
       }
     }, 2000)
   }
 
-  const handleInitiateSend = (text: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
-    if (isOwnerMode) {
-      executeSend(text, ownerProfile.name, 'owner', selectedVisitor === 'ALL' ? undefined : selectedVisitor, mediaUrl, mediaType)
-      return
-    }
-    if (!visitorName) {
-      setPendingText(text)
-      setPendingMedia(mediaUrl)
-      setPendingMediaType(mediaType)
-      setShowVisitorModal(true)
-    } else {
-      executeSend(text, visitorName, 'visitor', ownerProfile.name, mediaUrl, mediaType)
-    }
-  }
+  // 6. Send Message
+  const handleSendMessage = async (text: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
+    if (!currentUser || !selectedConvId) return
 
-  const handleSaveVisitorName = (name: string) => {
-    MockStore.setVisitorName(name)
-    setVisitorName(name)
-    setShowVisitorModal(false)
-    if (pendingText || pendingMedia) {
-      executeSend(pendingText, name, 'visitor', ownerProfile.name, pendingMedia, pendingMediaType)
-      setPendingText('')
-      setPendingMedia(undefined)
-      setPendingMediaType(undefined)
-    }
-  }
-
-  const executeSend = async (
-    content: string,
-    senderName: string,
-    senderType: 'visitor' | 'owner',
-    recipientName?: string,
-    mediaUrl?: string,
-    mediaType?: 'image' | 'video'
-  ) => {
-    const newMsg: DirectMessage = {
-      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `msg-${Date.now()}`,
-      sender_name: senderName,
-      recipient_name: recipientName,
-      sender_type: senderType,
-      avatar_url: senderType === 'owner' ? ownerProfile.avatarUrl : `https://api.dicebear.com/7.x/bottts/svg?seed=${senderName}`,
-      content,
-      media_url: mediaUrl,
-      media_type: mediaType || (mediaUrl ? 'image' : undefined),
-      seen: false,
-      created_at: new Date().toISOString(),
-    }
-
-    if (!isSupabaseConfigured || !supabase) {
-      const updated = MockStore.addMessage(newMsg)
-      setMessages(updated)
-      if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('NEW_DIRECT_MESSAGE', newMsg)
-    } else {
-      await supabase.from('messages').insert({
-        id: newMsg.id,
-        sender_name: newMsg.sender_name,
-        recipient_name: newMsg.recipient_name,
-        sender_type: newMsg.sender_type,
-        avatar_url: newMsg.avatar_url,
-        content: newMsg.content,
-        media_url: newMsg.media_url,
-        media_type: newMsg.media_type,
-        seen: false,
+    try {
+      const res = await fetch(`/api/conversations/${selectedConvId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: text,
+          media_url: mediaUrl,
+          media_type: mediaType
+        })
       })
+      const data = await res.json()
+
+      if (res.ok && data.message) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data.message.id)) return prev
+          return [...prev, data.message]
+        })
+        fetchConversations()
+      }
+    } catch (err) {
+      console.error('Send message error:', err)
     }
   }
 
+  // 7. React to Message
   const handleReact = async (messageId: string, emoji: string) => {
-    if (!currentUserName) return
+    if (!currentUser) return
 
     const target = messages.find((m) => m.id === messageId)
     if (!target) return
 
     const currentReactions = { ...(target.reactions || {}) }
-    const currentReactors = currentReactions[emoji] ? [...currentReactions[emoji]] : []
-    const idx = currentReactors.indexOf(currentUserName)
+    const reactors = currentReactions[emoji] ? [...currentReactions[emoji]] : []
+    const idx = reactors.indexOf(currentUser.id)
 
     if (idx >= 0) {
-      currentReactors.splice(idx, 1)
-      if (currentReactors.length === 0) {
+      reactors.splice(idx, 1)
+      if (reactors.length === 0) {
         delete currentReactions[emoji]
       } else {
-        currentReactions[emoji] = currentReactors
+        currentReactions[emoji] = reactors
       }
     } else {
-      currentReactions[emoji] = [...currentReactors, currentUserName]
+      currentReactions[emoji] = [...reactors, currentUser.id]
     }
 
-    const updatedMessages = messages.map((m) =>
-      m.id === messageId ? { ...m, reactions: currentReactions } : m
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, reactions: currentReactions } : m))
     )
-    setMessages(updatedMessages)
-
-    MockStore.toggleReaction(messageId, emoji, currentUserName)
-    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updatedMessages)
 
     if (isSupabaseConfigured && supabase) {
       await supabase.from('messages').update({ reactions: currentReactions }).eq('id', messageId)
     }
   }
 
+  // 8. Unsend Message
   const handleUnsend = async (messageId: string) => {
-    const updatedMessages = messages.map((m) =>
-      m.id === messageId ? { ...m, unsent: true, content: '', media_url: undefined, reactions: {} } : m
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, unsent: true, content: '', media_url: undefined, reactions: {} }
+          : m
+      )
     )
-    setMessages(updatedMessages)
-
-    MockStore.unsendMessage(messageId)
-    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('MESSAGES_UPDATE', updatedMessages)
 
     if (isSupabaseConfigured && supabase) {
       await supabase
@@ -438,236 +358,201 @@ export default function Home() {
     }
   }
 
-  const handleOwnerLoginSuccess = () => {
-    MockStore.setOwnerAuth(true)
-    setIsOwnerMode(true)
-    setShowOwnerModal(false)
-    setMobileOwnerView('conversations')
-    const updatedStatus = MockStore.updateOwnerStatus({ is_online: true, last_active_at: new Date().toISOString() })
-    setOwnerStatus(updatedStatus)
-    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_STATUS_UPDATE', updatedStatus)
-  }
-
-  const handleOwnerLogout = async () => {
-    try { await fetch('/api/owner/verify', { method: 'DELETE' }) } catch {}
-    MockStore.setOwnerAuth(false)
-    setIsOwnerMode(false)
-    setSelectedVisitor('ALL')
-
-    // Mark owner as offline and broadcast to all tabs/visitors
-    const offlineStatus = MockStore.updateOwnerStatus({ is_online: false, last_active_at: new Date().toISOString() })
-    setOwnerStatus(offlineStatus)
-    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_STATUS_UPDATE', offlineStatus)
-
-    if (isSupabaseConfigured && supabase) {
-      await supabase.from('owner_presence').update({ is_online: false, last_active_at: new Date().toISOString() }).eq('id', 1)
-    }
-  }
-
-  const handleSaveProfile = async (updated: OwnerProfile) => {
-    setOwnerProfile(updated)
-    MockStore.updateOwnerProfile(updated)
-    if (mockStoreRef.current) mockStoreRef.current.sendBroadcast('OWNER_PROFILE_UPDATE', updated)
-
-    if (isSupabaseConfigured && supabase) {
-      await supabase.from('owner_profile').upsert({
-        id: 1,
-        name: updated.name,
-        bio: updated.bio,
-        avatar_url: updated.avatarUrl,
-        status_note: updated.statusNote,
+  // 9. Accept / Decline Request
+  const handleAcceptRequest = async (requestId: string) => {
+    try {
+      const res = await fetch(`/api/requests/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accept' })
       })
+      const data = await res.json()
+      if (res.ok && data.conversation_id) {
+        fetchRequests()
+        await fetchConversations()
+        setSelectedConvId(data.conversation_id)
+      }
+    } catch (err) {
+      console.error('Accept request error:', err)
     }
+  }
+
+  const handleDeclineRequest = async (requestId: string) => {
+    try {
+      await fetch(`/api/requests/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decline' })
+      })
+      fetchRequests()
+    } catch (err) {
+      console.error('Decline request error:', err)
+    }
+  }
+
+  // 10. Sign Out
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {}
+    setCurrentUser(null)
+    setSelectedConvId(null)
+    setConversations([])
+    setMessages([])
+  }
+
+  // If loading auth
+  if (authLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center p-4 bg-[#f8fafb]">
+        <div className="flex items-center gap-2.5 text-xs text-[#5f6368]">
+          <div className="w-4 h-4 border-2 border-[#1a73e8] border-t-transparent rounded-full animate-spin" />
+          <span>Loading Chat Hub...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // If not logged in -> Show Auth Screen
+  if (!currentUser) {
+    return <AuthScreen onAuthSuccess={(user) => { setCurrentUser(user); fetchConversations(); fetchRequests() }} />
   }
 
   return (
-    <main className="h-screen flex flex-col max-w-6xl mx-auto p-2 sm:p-6 overflow-hidden">
-      {/* Header */}
+    <main className="h-screen flex flex-col max-w-6xl mx-auto p-2 sm:p-4 overflow-hidden">
+      {/* Top Header */}
       <GoogleHeader
-        ownerName={ownerProfile.name}
-        ownerBio={ownerProfile.bio}
-        ownerAvatarUrl={ownerProfile.avatarUrl}
-        statusNote={ownerProfile.statusNote}
-        isOnline={ownerStatus.is_online}
-        lastActiveAt={ownerStatus.last_active_at}
-        isOwnerMode={isOwnerMode}
-        onToggleOwnerModal={() => isOwnerMode ? handleOwnerLogout() : setShowOwnerModal(true)}
+        currentUser={currentUser}
         onOpenProfileModal={() => setShowProfileModal(true)}
+        onSignOut={handleSignOut}
       />
 
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col md:flex-row gap-3 sm:gap-4 min-h-0 overflow-hidden">
-        {/* Owner Sidebar */}
-        {isOwnerMode && (
-          <div className={`w-full md:w-72 h-full shrink-0 ${mobileOwnerView === 'conversations' ? 'flex' : 'hidden md:flex'}`}>
-            <OwnerSidebar
-              conversations={conversations}
-              selectedVisitor={selectedVisitor}
-              onSelectVisitor={(name) => {
-                setSelectedVisitor(name)
-                setMobileOwnerView('chat')
-              }}
-              totalMessagesCount={messages.length}
-            />
-          </div>
-        )}
+      {/* Main App Body */}
+      <div className="flex-1 flex gap-3 sm:gap-4 min-h-0 overflow-hidden">
+        {/* Sidebar */}
+        <div className={`w-full md:w-80 h-full shrink-0 ${mobileView === 'sidebar' ? 'flex' : 'hidden md:flex'}`}>
+          <ChatSidebar
+            currentUser={currentUser}
+            conversations={conversations}
+            selectedConvId={selectedConvId}
+            onSelectConversation={(id) => {
+              setSelectedConvId(id)
+              setMobileView('chat')
+            }}
+            incomingRequests={incomingRequests}
+            outgoingRequests={outgoingRequests}
+            onAcceptRequest={handleAcceptRequest}
+            onDeclineRequest={handleDeclineRequest}
+            onOpenCreateGroup={() => setShowCreateGroupModal(true)}
+            onRequestSent={fetchRequests}
+          />
+        </div>
 
-        {/* Chat / Message Container */}
+        {/* Active Chat Conversation Area */}
         <div
-          className={`flex-1 md-card flex flex-col min-h-0 overflow-hidden ${
-            isOwnerMode && mobileOwnerView === 'conversations' ? 'hidden md:flex' : 'flex'
+          className={`flex-1 md-card flex flex-col min-h-0 overflow-hidden bg-white rounded-2xl border border-[#e8eaed] ${
+            mobileView === 'sidebar' ? 'hidden md:flex' : 'flex'
           }`}
         >
-          {/* Mobile Owner Back Bar / Thread Banner */}
-          {isOwnerMode && (
-            <div className="flex items-center justify-between px-3.5 sm:px-6 py-2.5 border-b border-[#e8eaed] shrink-0 bg-[#f8fafb]">
-              <div className="flex items-center gap-2">
-                {/* Mobile Back button */}
-                <button
-                  onClick={() => {
-                    setMobileOwnerView('conversations')
-                    if (selectedVisitor !== 'ALL') setSelectedVisitor('ALL')
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#e8eaed] text-[#3c4043] text-xs font-medium hover:bg-[#dadce0] transition-colors md:hidden"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Conversations</span>
-                </button>
+          {selectedConvId && activeConv ? (
+            <>
+              {/* Chat Header */}
+              <ChatHeader
+                currentUser={currentUser}
+                conversation={activeConv}
+                onBack={() => setMobileView('sidebar')}
+              />
 
-                {/* Desktop Back button */}
-                {selectedVisitor !== 'ALL' && (
-                  <button
-                    onClick={() => setSelectedVisitor('ALL')}
-                    className="hidden md:flex items-center p-1.5 rounded-full hover:bg-[#f1f4f8] text-[#5f6368]"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
+              {/* Messages Viewport */}
+              <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-1">
+                {messages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#5f6368] space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-[#e8f0fe] text-[#1a73e8] flex items-center justify-center">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-[#1f1f1f]">Start the conversation</h3>
+                    <p className="text-xs max-w-xs">
+                      Send a private message, photo, video, or emoji reaction to break the ice!
+                    </p>
+                  </div>
+                ) : (
+                  messages.map((msg) => (
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      currentUserId={currentUser.id}
+                      onReact={handleReact}
+                      onUnsend={handleUnsend}
+                    />
+                  ))
                 )}
 
-                <div>
-                  <h3 className="font-semibold text-xs sm:text-sm text-[#1f1f1f]">
-                    {selectedVisitor === 'ALL' ? 'All Messages' : `Thread with ${selectedVisitor}`}
-                  </h3>
-                  <p className="text-[10px] text-[#9aa0a6]">
-                    {selectedVisitor === 'ALL' ? 'Combined message stream' : 'Direct 1-on-1 Messages'}
-                  </p>
-                </div>
-              </div>
-
-              {selectedVisitor !== 'ALL' && (
-                <button
-                  onClick={() => {
-                    setSelectedVisitor('ALL')
-                    setMobileOwnerView('conversations')
-                  }}
-                  className="text-xs text-[#1a73e8] font-medium hover:underline"
-                >
-                  Show All
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Visitor Info Banner */}
-          {!isOwnerMode && visitorName && (
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[#e8eaed] shrink-0 bg-[#f8fafb] text-xs text-[#5f6368]">
-              <span className="flex items-center gap-1.5 truncate">
-                <span className="w-2 h-2 rounded-full bg-[#1e8e3e]" />
-                Direct 1-on-1 with <strong>{ownerProfile.name}</strong> as <strong className="text-[#1a73e8]">{visitorName}</strong>
-              </span>
-              <button
-                onClick={() => setShowVisitorModal(true)}
-                className="text-[11px] text-[#1a73e8] hover:underline shrink-0 ml-2"
-              >
-                Change Name
-              </button>
-            </div>
-          )}
-
-          {/* Messages — Scrollable Viewport */}
-          {displayedMessages.length === 0 && isOwnerMode ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-8 space-y-3">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#d3e3fd] text-[#1a73e8] flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
-              </div>
-              <h3 className="text-sm sm:text-base font-semibold text-[#1f1f1f]">
-                {selectedVisitor === 'ALL'
-                  ? 'No messages yet'
-                  : `No messages from ${selectedVisitor}`}
-              </h3>
-              <p className="text-xs text-[#5f6368] max-w-xs leading-relaxed">
-                Select another conversation from the sidebar or wait for new messages.
-              </p>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-1">
-              {/* Owner welcome message — always shown first for visitors */}
-              {!isOwnerMode && (
-                <div className="flex items-end gap-2 mb-3">
-                  <img
-                    src={ownerProfile.avatarUrl}
-                    alt={ownerProfile.name}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#e8eaed] shrink-0"
-                  />
-                  <div className="max-w-[75%]">
-                    <span className="text-[10px] text-[#5f6368] ml-1 mb-0.5 block">{ownerProfile.name}</span>
-                    <div className="px-3.5 py-2.5 rounded-2xl rounded-bl-md bg-[#f1f4f8] border border-[#e8eaed] text-[#1f1f1f] text-sm leading-relaxed">
-                      👋 Hi, I&apos;m {ownerProfile.name}. Feel free to drop me a message right here!
+                {/* Live Typing Indicator */}
+                {typingUser && (
+                  <div className="flex items-center gap-2 my-2 animate-fade-in">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#f1f4f8] border border-[#e8eaed] text-[#5f6368]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.3s]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.15s]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce" />
+                      <span className="text-[11px] font-medium ml-1 text-[#3c4043]">{typingUser} is typing...</span>
                     </div>
-                    <p className="text-[9px] text-[#9aa0a6] mt-0.5 ml-1">Welcome message</p>
                   </div>
-                </div>
-              )}
+                )}
 
-              {displayedMessages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  message={msg}
-                  isOwnerView={isOwnerMode}
-                  currentUserName={currentUserName}
-                  onReact={handleReact}
-                  onUnsend={handleUnsend}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Message Composer */}
+              <div className="p-3 sm:px-6 sm:py-3.5 border-t border-[#e8eaed] bg-white shrink-0">
+                <MessageInput
+                  onSendMessage={handleSendMessage}
+                  onTyping={handleTyping}
+                  placeholder={`Message ${activeConv.type === 'group' ? activeConv.name : activeConv.members?.find((m) => m.id !== currentUser.id)?.display_name || 'chat'}...`}
                 />
-              ))}
+              </div>
+            </>
+          ) : (
+            /* Empty State when no conversation is selected */
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
+              <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center shadow-lg">
+                <MessageSquare className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-base font-bold text-[#1f1f1f]">Select or Start a Conversation</h2>
+                <p className="text-xs text-[#5f6368] max-w-sm leading-relaxed">
+                  Choose a chat from the sidebar or click <strong>"Find"</strong> to search a friend's 6-character Short ID to connect!
+                </p>
+              </div>
 
-              {/* Live Typing Indicator */}
-              {typingUser && (
-                <div className="flex items-center gap-2 my-2 animate-fade-in">
-                  <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-[#f1f4f8] border border-[#e8eaed] text-[#5f6368]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.3s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.15s]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce" />
-                    <span className="text-[11px] font-medium ml-1 text-[#3c4043]">{typingUser} is typing...</span>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
+              <div className="p-3 rounded-2xl bg-[#f8fafb] border border-[#e8eaed] text-left space-y-1 text-xs">
+                <p className="font-semibold text-[#1f1f1f]">Your Short ID:</p>
+                <p className="font-mono text-base font-extrabold text-[#1a73e8] tracking-widest">#{currentUser.short_id}</p>
+                <p className="text-[10px] text-[#5f6368]">Share this ID with friends so they can request to message you.</p>
+              </div>
             </div>
           )}
-
-          {/* Input Box */}
-          <div className="p-3 sm:px-6 sm:py-4 border-t border-[#e8eaed] shrink-0 bg-white">
-            <MessageInput
-              onSendMessage={handleInitiateSend}
-              onTyping={handleTyping}
-              placeholder={
-                isOwnerMode
-                  ? selectedVisitor !== 'ALL' ? `Replying to ${selectedVisitor}...` : `Replying as ${ownerProfile.name}...`
-                  : visitorName ? `Message ${ownerProfile.name} as ${visitorName}...` : `Send ${ownerProfile.name} a private message...`
-              }
-            />
-          </div>
         </div>
       </div>
 
-      <div className="text-center text-[10px] sm:text-[11px] text-[#9aa0a6] py-1.5 sm:py-2 font-medium shrink-0">
-        Direct Messaging Hub • Material Design
-      </div>
+      {/* Modals */}
+      {showProfileModal && (
+        <ProfileModal
+          user={currentUser}
+          onSave={(updated) => setCurrentUser(updated)}
+          onClose={() => setShowProfileModal(false)}
+        />
+      )}
 
-      {showVisitorModal && <VisitorNameModal onSaveName={handleSaveVisitorName} onCancel={() => { setShowVisitorModal(false); setPendingText('') }} />}
-      {showOwnerModal && <OwnerLoginModal onSuccess={handleOwnerLoginSuccess} onClose={() => setShowOwnerModal(false)} />}
-      {showProfileModal && <OwnerProfileModal profile={ownerProfile} onSave={handleSaveProfile} onClose={() => setShowProfileModal(false)} />}
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          currentUser={currentUser}
+          onGroupCreated={(group) => {
+            fetchConversations()
+            setSelectedConvId(group.id)
+          }}
+          onClose={() => setShowCreateGroupModal(false)}
+        />
+      )}
     </main>
   )
 }
