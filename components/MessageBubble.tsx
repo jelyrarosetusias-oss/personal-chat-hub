@@ -41,14 +41,14 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
 
   if (message.unsent) {
     return (
-      <div className={`flex items-end gap-2.5 my-2.5 ${isOwnerSender ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`flex items-end gap-2.5 my-2.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
         <img
           src={message.avatar_url || defaultAvatar}
           alt={message.sender_name}
           className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-[#e8eaed] opacity-40"
         />
-        <div className={`max-w-[78%] sm:max-w-[62%] flex flex-col ${isOwnerSender ? 'items-end' : 'items-start'}`}>
-          <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isOwnerSender ? 'flex-row-reverse' : ''}`}>
+        <div className={`max-w-[78%] sm:max-w-[62%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+          <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isMine ? 'flex-row-reverse' : ''}`}>
             <span className="font-semibold text-[#9aa0a6]">{message.sender_name}</span>
             <span className="text-[#dadce0]">•</span>
             <span className="text-[#dadce0]">{formatTime(message.created_at)}</span>
@@ -71,7 +71,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
 
   return (
     <div
-      className={`group flex items-end gap-2.5 my-2.5 relative ${isOwnerSender ? 'flex-row-reverse' : 'flex-row'}`}
+      className={`group flex items-end gap-2.5 my-2.5 relative ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
       onMouseLeave={() => { setShowReactionPicker(false); setShowContextMenu(false) }}
     >
       {/* Avatar */}
@@ -82,9 +82,9 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
       />
 
       {/* Bubble Container */}
-      <div className={`max-w-[80%] sm:max-w-[65%] flex flex-col ${isOwnerSender ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[80%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
         {/* Sender + Time */}
-        <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isOwnerSender ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isMine ? 'flex-row-reverse' : ''}`}>
           <span className="font-semibold text-[#3c4043]">{message.sender_name}</span>
           <span className="text-[#9aa0a6]">•</span>
           <span className="text-[#9aa0a6]">{formatTime(message.created_at)}</span>
@@ -106,7 +106,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
 
               <div
                 className={`absolute bottom-full mb-2 ${
-                  isOwnerSender ? 'right-0' : 'left-0'
+                  isMine ? 'right-0' : 'left-0'
                 } flex items-center gap-1 p-1.5 bg-white/95 backdrop-blur-md rounded-full border border-[#e8eaed] shadow-xl z-30 animate-in fade-in zoom-in-95 duration-150`}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -148,7 +148,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
 
           {/* Unsend Confirm Popover (Desktop / Context) */}
           {showContextMenu && isMine && (
-            <div className={`absolute bottom-full mb-1 ${isOwnerSender ? 'right-0' : 'left-0'} md-card shadow-lg z-30 p-2 w-40 space-y-1`}>
+            <div className={`absolute bottom-full mb-1 ${isMine ? 'right-0' : 'left-0'} md-card shadow-lg z-30 p-2 w-40 space-y-1`}>
               <p className="text-[10px] text-[#5f6368] px-2 pb-1 border-b border-[#e8eaed]">Message actions</p>
               <button
                 onClick={() => { onUnsend(message.id); setShowContextMenu(false) }}
@@ -198,7 +198,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
             <div
               onClick={handleBubbleClick}
               className={`p-3 text-[0.8125rem] leading-relaxed break-words space-y-2 cursor-pointer transition-all active:scale-[0.99] select-none ${
-                isOwnerSender
+                isMine
                   ? 'bg-[#1a73e8] text-white rounded-[1.25rem] rounded-br-[0.375rem] shadow-sm'
                   : 'bg-[#f1f4f8] text-[#1f1f1f] rounded-[1.25rem] rounded-bl-[0.375rem] border border-[#e8eaed]'
               }`}
@@ -244,7 +244,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
           )}
 
           {/* Desktop Hover Action Buttons (react + unsend) */}
-          <div className={`hidden sm:flex absolute top-0 ${isOwnerSender ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'} opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5`}>
+          <div className={`hidden sm:flex absolute top-0 ${isMine ? 'left-0 -translate-x-full pr-1' : 'right-0 translate-x-full pl-1'} opacity-0 group-hover:opacity-100 transition-opacity items-center gap-0.5`}>
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -273,7 +273,7 @@ export default function MessageBubble({ message, isOwnerView, currentUserName, o
         </div>
 
         {/* Reaction Chips & Seen Status */}
-        <div className={`flex items-center gap-2 mt-1 w-full ${isOwnerSender ? 'justify-end' : 'justify-start'}`}>
+        <div className={`flex items-center gap-2 mt-1 w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
           {reactionEntries.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {reactionEntries.map(([emoji, reactors]) => {
