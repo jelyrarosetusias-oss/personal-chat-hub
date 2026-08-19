@@ -11,6 +11,7 @@ interface MessageBubbleProps {
   currentUserId: string
   showAvatar?: boolean
   showSenderName?: boolean
+  showDeliveryStatus?: boolean
   onReact: (messageId: string, emoji: string) => void
   onUnsend: (messageId: string) => void
 }
@@ -20,6 +21,7 @@ export default function MessageBubble({
   currentUserId,
   showAvatar = true,
   showSenderName = false,
+  showDeliveryStatus = false,
   onReact,
   onUnsend
 }: MessageBubbleProps) {
@@ -323,8 +325,8 @@ export default function MessageBubble({
             </div>
           )}
 
-          {/* Seen Status for sender's messages */}
-          {isMine && (
+          {/* Seen Status for sender's messages (Only shown on latest outgoing bubble) */}
+          {isMine && showDeliveryStatus && (
             <div className="flex items-center gap-1 text-[10px] select-none shrink-0 ml-1">
               {isSeenByRecipient ? (
                 <span className="flex items-center gap-0.5 text-[#1a73e8] font-semibold text-[10px]">

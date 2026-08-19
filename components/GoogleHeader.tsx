@@ -2,11 +2,14 @@
 
 import React, { useState, useEffect } from 'react'
 import { UserProfile } from '@/lib/types'
-import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown, Eye, EyeOff } from 'lucide-react'
+import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown, Eye, EyeOff, Newspaper } from 'lucide-react'
 import Link from 'next/link'
 
 interface GoogleHeaderProps {
   currentUser: UserProfile
+  activeMainTab?: 'feed' | 'chat'
+  onMainTabChange?: (tab: 'feed' | 'chat') => void
+  unreadCount?: number
   onOpenProfileModal: () => void
   onSignOut: () => void
   onUserUpdate?: (updated: UserProfile) => void
@@ -14,6 +17,9 @@ interface GoogleHeaderProps {
 
 export default function GoogleHeader({
   currentUser,
+  activeMainTab = 'chat',
+  onMainTabChange,
+  unreadCount = 0,
   onOpenProfileModal,
   onSignOut,
   onUserUpdate
@@ -66,13 +72,13 @@ export default function GoogleHeader({
   }
 
   return (
-    <header className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 mb-1.5 sm:mb-3 bg-white/95 backdrop-blur-md rounded-2xl md-card border border-[#e8eaed] shrink-0 relative z-30">
+    <header className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-2.5 mb-1.5 sm:mb-3 bg-white/95 backdrop-blur-md rounded-2xl md-card border border-[#e8eaed] shrink-0 relative z-30">
       {/* Brand / Logo */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center shadow-sm shrink-0">
           <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 hidden xs:block">
           <div className="flex items-center gap-1.5">
             <h1 className="text-sm sm:text-base font-mono font-bold text-[#1f1f1f] leading-none tracking-widest truncate select-none">⍙⌖⍜⌰⏃⍀⟟⌇</h1>
             {currentUser.is_admin && (
@@ -84,6 +90,42 @@ export default function GoogleHeader({
           <p className="text-[10px] sm:text-[11px] font-mono text-[#9aa0a6] leading-tight hidden sm:block truncate select-none tracking-wider">⏁⍀⏃⋏⌇⋔⟟⌇⌇⟟⍜⋏</p>
         </div>
       </div>
+
+      {/* Main Navigation Tab Switcher (Feed / Chat) */}
+      {onMainTabChange && (
+        <div className="flex items-center gap-1 bg-[#f1f4f8] p-1 rounded-xl border border-[#e8eaed]">
+          <button
+            type="button"
+            onClick={() => onMainTabChange('feed')}
+            className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeMainTab === 'feed'
+                ? 'bg-white text-[#1a73e8] shadow-xs'
+                : 'text-[#5f6368] hover:text-[#1f1f1f]'
+            }`}
+          >
+            <Newspaper className="w-4 h-4" />
+            <span>Feed</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onMainTabChange('chat')}
+            className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
+              activeMainTab === 'chat'
+                ? 'bg-white text-[#1a73e8] shadow-xs'
+                : 'text-[#5f6368] hover:text-[#1f1f1f]'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Chat</span>
+            {unreadCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-[#d93025] text-white text-[9px] font-bold flex items-center justify-center -ml-0.5">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* User Account Controls */}
       <div className="relative shrink-0">

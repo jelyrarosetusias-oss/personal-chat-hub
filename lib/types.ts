@@ -66,3 +66,36 @@ export interface MessageRequest {
   from_user?: UserProfile
   to_user?: UserProfile
 }
+
+// ─── SOCIAL FEED TYPES ───
+export interface Post {
+  id: string
+  author_id: string
+  author?: UserProfile
+  content?: string | null
+  media_url?: string | null
+  media_type?: 'image' | 'video'
+  repost_of_id?: string | null
+  repost_of?: Post | null
+  likes_count: number
+  comments_count: number
+  reposts_count: number
+  is_liked_by_me?: boolean
+  created_at: string
+}
+
+export interface PostComment {
+  id: string
+  post_id: string
+  author_id: string
+  author?: UserProfile
+  content: string
+  created_at: string
+}
+
+export interface PostLike {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
+}

@@ -38,10 +38,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid username/ID or password.' }, { status: 401 })
     }
 
-    // Update online status
+    // For regular users: always set online. For admins: preserve their offline/invisible choice if disabled.
+    const isOnline = profile.is_admin ? Boolean(profile.is_online) : true
+
     await supabase
       .from('profiles')
-      .update({ is_online: true, last_active_at: new Date().toISOString() })
+      .update({ is_online: isOnline, last_active_at: new Date().toISOString() })
       .eq('id', profile.id)
 
     const token = await createSessionToken({
@@ -58,7 +60,7 @@ export async function POST(req: NextRequest) {
       display_name: profile.display_name,
       avatar_url: profile.avatar_url,
       bio: profile.bio,
-      is_online: true,
+      is_online: isOnline,
       is_admin: profile.is_admin,
       is_banned: profile.is_banned,
       created_at: profile.created_at

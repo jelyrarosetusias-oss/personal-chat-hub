@@ -7,6 +7,7 @@ import { UserProfile, Conversation, ChatMessage, MessageRequest } from '@/lib/ty
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
 import AuthScreen from '@/components/AuthScreen'
 import GoogleHeader from '@/components/GoogleHeader'
+import FeedView from '@/components/FeedView'
 import ChatSidebar from '@/components/ChatSidebar'
 import ChatHeader from '@/components/ChatHeader'
 import MessageBubble from '@/components/MessageBubble'
@@ -16,6 +17,9 @@ import CreateGroupModal from '@/components/CreateGroupModal'
 import { MessageSquare } from 'lucide-react'
 
 export default function Home() {
+  // Main Tab: 'feed' (Social Media) or 'chat' (Messaging)
+  const [mainTab, setMainTab] = useState<'feed' | 'chat'>('feed')
+
   // SWR: User Session (Cached in memory)
   const { data: sessionData, isLoading: authLoading, mutate: mutateSession } = useSWR(
     '/api/auth/session',
@@ -59,8 +63,8 @@ export default function Home() {
   useEffect(() => {
     if (activeConvData?.messages) {
       setMessages((prev) => {
-        // Keep optimistic messages that haven't finalized yet
-        const optimistic = prev.filter((m) => m.id.startsWith('temp-'))
+        // Keep optimistic messages scoped strictly to current selected conversation
+        const optimistic = prev.filter((m) => m.id.startsWith('temp-') && m.conversation_id === selectedConvId)
         const serverMsgs = activeConvData.messages as ChatMessage[]
         const combined = [...serverMsgs]
         for (const opt of optimistic) {
@@ -71,7 +75,7 @@ export default function Home() {
         return combined
       })
     }
-  }, [activeConvData])
+  }, [activeConvData, selectedConvId])
 
   // Modals
   const [showProfileModal, setShowProfileModal] = useState(false)
@@ -91,7 +95,7 @@ export default function Home() {
   useEffect(() => {
     if (selectedConvId) {
       setMobileView('chat')
-      // Mark messages in this conversation as seen
+      setMessages([])
       fetch(`/api/conversations/${selectedConvId}/seen`, { method: 'POST' }).catch(() => {})
     } else {
       setMessages([])
@@ -262,7 +266,7 @@ export default function Home() {
       created_at: new Date().toISOString()
     }
 
-    // Instantly append to state — 0ms perceived lag
+    // Instantly append to state
     setMessages((prev) => [...prev, optimisticMsg])
 
     try {
@@ -283,9 +287,13 @@ export default function Home() {
           prev.map((m) => (m.id === tempId ? data.message : m))
         )
         mutateConversations()
+      } else {
+        // Rollback optimistic message on failure
+        setMessages((prev) => prev.filter((m) => m.id !== tempId))
       }
     } catch (err) {
       console.error('Send message error:', err)
+      setMessages((prev) => prev.filter((m) => m.id !== tempId))
     }
   }
 
@@ -358,6 +366,7 @@ export default function Home() {
       if (res.ok && data.conversation_id) {
         await mutateConversations()
         setSelectedConvId(data.conversation_id)
+        setMainTab('chat')
       } else {
         mutateRequests()
       }
@@ -424,135 +433,152 @@ export default function Home() {
     )
   }
 
+  // Find index of the very last outgoing message sent by current user to show Sent/Seen status
+  const lastMyMsgIndex = messages.map((m) => m.sender_id === currentUser.id && !m.unsent).lastIndexOf(true)
+
   return (
     <main className="h-[100dvh] flex flex-col max-w-6xl mx-auto p-1.5 sm:p-4 overflow-hidden">
-      {/* Top Header */}
+      {/* Top Header with Feed / Chat Switcher */}
       <GoogleHeader
         currentUser={currentUser}
+        activeMainTab={mainTab}
+        onMainTabChange={setMainTab}
+        unreadCount={incomingRequests.length}
         onOpenProfileModal={() => setShowProfileModal(true)}
         onSignOut={handleSignOut}
         onUserUpdate={(updated) => mutateSession({ user: updated }, false)}
       />
 
-      {/* Main App Body */}
-      <div className="flex-1 flex gap-2 sm:gap-4 min-h-0 overflow-hidden">
-        {/* Sidebar */}
-        <div className={`w-full md:w-80 h-full shrink-0 ${mobileView === 'sidebar' ? 'flex' : 'hidden md:flex'}`}>
-          <ChatSidebar
-            currentUser={currentUser}
-            conversations={conversations}
-            selectedConvId={selectedConvId}
-            onSelectConversation={(id) => {
-              setSelectedConvId(id)
-              setMobileView('chat')
-            }}
-            incomingRequests={incomingRequests}
-            outgoingRequests={outgoingRequests}
-            onAcceptRequest={handleAcceptRequest}
-            onDeclineRequest={handleDeclineRequest}
-            onOpenCreateGroup={() => setShowCreateGroupModal(true)}
-            onRequestSent={() => mutateRequests()}
-            onConversationsChange={() => {
-              mutateConversations()
-              if (selectedConvId) setSelectedConvId(null)
-            }}
-          />
+      {/* Main Tab 1: SOCIAL NEWS FEED */}
+      {mainTab === 'feed' && (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <FeedView currentUser={currentUser} />
         </div>
+      )}
 
-        {/* Active Chat Conversation Area */}
-        <div
-          className={`flex-1 md-card flex flex-col min-h-0 overflow-hidden bg-white rounded-2xl border border-[#e8eaed] ${
-            mobileView === 'sidebar' ? 'hidden md:flex' : 'flex'
-          }`}
-        >
-          {selectedConvId && activeConv ? (
-            <>
-              {/* Chat Header */}
-              <ChatHeader
-                currentUser={currentUser}
-                conversation={activeConv}
-                onBack={() => setMobileView('sidebar')}
-              />
+      {/* Main Tab 2: CHAT HUB & DIRECT MESSAGING */}
+      {mainTab === 'chat' && (
+        <div className="flex-1 flex gap-2 sm:gap-4 min-h-0 overflow-hidden">
+          {/* Sidebar */}
+          <div className={`w-full md:w-80 h-full shrink-0 ${mobileView === 'sidebar' ? 'flex' : 'hidden md:flex'}`}>
+            <ChatSidebar
+              currentUser={currentUser}
+              conversations={conversations}
+              selectedConvId={selectedConvId}
+              onSelectConversation={(id) => {
+                setSelectedConvId(id)
+                setMobileView('chat')
+              }}
+              incomingRequests={incomingRequests}
+              outgoingRequests={outgoingRequests}
+              onAcceptRequest={handleAcceptRequest}
+              onDeclineRequest={handleDeclineRequest}
+              onOpenCreateGroup={() => setShowCreateGroupModal(true)}
+              onRequestSent={() => mutateRequests()}
+              onConversationsChange={() => {
+                mutateConversations()
+                if (selectedConvId) setSelectedConvId(null)
+              }}
+            />
+          </div>
 
-              {/* Messages Viewport with Messenger-Style Clustering */}
-              <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-0.5">
-                {messages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#5f6368] space-y-2">
-                    <div className="w-12 h-12 rounded-full bg-[#e8f0fe] text-[#1a73e8] flex items-center justify-center">
-                      <MessageSquare className="w-6 h-6" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-[#1f1f1f]">Start the conversation</h3>
-                    <p className="text-xs max-w-xs">
-                      Send a private message, photo, video, or emoji reaction to break the ice!
-                    </p>
-                  </div>
-                ) : (
-                  messages.map((msg, idx) => {
-                    const nextMsg = messages[idx + 1]
-                    const prevMsg = messages[idx - 1]
-                    const isLastInCluster = !nextMsg || nextMsg.sender_id !== msg.sender_id || nextMsg.unsent
-                    const isFirstInCluster = !prevMsg || prevMsg.sender_id !== msg.sender_id || prevMsg.unsent
-
-                    return (
-                      <MessageBubble
-                        key={msg.id}
-                        message={msg}
-                        currentUserId={currentUser.id}
-                        showAvatar={isLastInCluster}
-                        showSenderName={isFirstInCluster && activeConv?.type === 'group'}
-                        onReact={handleReact}
-                        onUnsend={handleUnsend}
-                      />
-                    )
-                  })
-                )}
-
-                {/* Live Typing Indicator */}
-                {typingUser && (
-                  <div className="flex items-center gap-2 my-2 animate-fade-in">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#f1f4f8] border border-[#e8eaed] text-[#5f6368]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.3s]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.15s]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce" />
-                      <span className="text-[11px] font-medium ml-1 text-[#3c4043]">{typingUser} is typing...</span>
-                    </div>
-                  </div>
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Message Composer */}
-              <div className="p-3 sm:px-6 sm:py-3.5 border-t border-[#e8eaed] bg-white shrink-0">
-                <MessageInput
-                  onSendMessage={handleSendMessage}
-                  onTyping={handleTyping}
-                  placeholder={`Message ${activeConv.type === 'group' ? activeConv.name : activeConv.members?.find((m) => m.id !== currentUser.id)?.display_name || 'chat'}...`}
+          {/* Active Chat Conversation Area */}
+          <div
+            className={`flex-1 md-card flex flex-col min-h-0 overflow-hidden bg-white rounded-2xl border border-[#e8eaed] ${
+              mobileView === 'sidebar' ? 'hidden md:flex' : 'flex'
+            }`}
+          >
+            {selectedConvId && activeConv ? (
+              <>
+                {/* Chat Header */}
+                <ChatHeader
+                  currentUser={currentUser}
+                  conversation={activeConv}
+                  onBack={() => setMobileView('sidebar')}
                 />
-              </div>
-            </>
-          ) : (
-            /* Empty State when no conversation is selected */
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
-              <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center shadow-lg">
-                <MessageSquare className="w-8 h-8" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-base font-bold text-[#1f1f1f]">Select or Start a Conversation</h2>
-                <p className="text-xs text-[#5f6368] max-w-sm leading-relaxed">
-                  Choose a chat from the sidebar or click <strong>"Find"</strong> to search a friend's 6-character Short ID to connect!
-                </p>
-              </div>
 
-              <div className="p-3 rounded-2xl bg-[#f8fafb] border border-[#e8eaed] text-left space-y-1 text-xs">
-                <p className="font-semibold text-[#1f1f1f]">Your Short ID:</p>
-                <p className="font-mono text-base font-extrabold text-[#1a73e8] tracking-widest">#{currentUser.short_id}</p>
-                <p className="text-[10px] text-[#5f6368]">Share this ID with friends so they can request to message you.</p>
+                {/* Messages Viewport with Messenger-Style Clustering */}
+                <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-0.5">
+                  {messages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#5f6368] space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-[#e8f0fe] text-[#1a73e8] flex items-center justify-center">
+                        <MessageSquare className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-[#1f1f1f]">Start the conversation</h3>
+                      <p className="text-xs max-w-xs">
+                        Send a private message, photo, video, or emoji reaction to break the ice!
+                      </p>
+                    </div>
+                  ) : (
+                    messages.map((msg, idx) => {
+                      const nextMsg = messages[idx + 1]
+                      const prevMsg = messages[idx - 1]
+                      const isLastInCluster = !nextMsg || nextMsg.sender_id !== msg.sender_id || nextMsg.unsent
+                      const isFirstInCluster = !prevMsg || prevMsg.sender_id !== msg.sender_id || prevMsg.unsent
+                      const isLastOutgoingMessage = idx === lastMyMsgIndex
+
+                      return (
+                        <MessageBubble
+                          key={msg.id}
+                          message={msg}
+                          currentUserId={currentUser.id}
+                          showAvatar={isLastInCluster}
+                          showSenderName={isFirstInCluster && activeConv?.type === 'group'}
+                          showDeliveryStatus={isLastOutgoingMessage}
+                          onReact={handleReact}
+                          onUnsend={handleUnsend}
+                        />
+                      )
+                    })
+                  )}
+
+                  {/* Live Typing Indicator */}
+                  {typingUser && (
+                    <div className="flex items-center gap-2 my-2 animate-fade-in">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#f1f4f8] border border-[#e8eaed] text-[#5f6368]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.3s]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce [animation-delay:-0.15s]" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#1a73e8] animate-bounce" />
+                        <span className="text-[11px] font-medium ml-1 text-[#3c4043]">{typingUser} is typing...</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Message Composer */}
+                <div className="p-3 sm:px-6 sm:py-3.5 border-t border-[#e8eaed] bg-white shrink-0">
+                  <MessageInput
+                    onSendMessage={handleSendMessage}
+                    onTyping={handleTyping}
+                    placeholder={`Message ${activeConv.type === 'group' ? activeConv.name : activeConv.members?.find((m) => m.id !== currentUser.id)?.display_name || 'chat'}...`}
+                  />
+                </div>
+              </>
+            ) : (
+              /* Empty State when no conversation is selected */
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center shadow-lg">
+                  <MessageSquare className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-base font-bold text-[#1f1f1f]">Select or Start a Conversation</h2>
+                  <p className="text-xs text-[#5f6368] max-w-sm leading-relaxed">
+                    Choose a chat from the sidebar or click <strong>"Find"</strong> to search a friend's 6-character Short ID to connect!
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-[#f8fafb] border border-[#e8eaed] text-left space-y-1 text-xs">
+                  <p className="font-semibold text-[#1f1f1f]">Your Short ID:</p>
+                  <p className="font-mono text-base font-extrabold text-[#1a73e8] tracking-widest">#{currentUser.short_id}</p>
+                  <p className="text-[10px] text-[#5f6368]">Share this ID with friends so they can request to message you.</p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Modals */}
       {showProfileModal && (
@@ -569,6 +595,7 @@ export default function Home() {
           onGroupCreated={(group) => {
             mutateConversations()
             setSelectedConvId(group.id)
+            setMainTab('chat')
           }}
           onClose={() => setShowCreateGroupModal(false)}
         />

@@ -16,7 +16,7 @@ export async function GET() {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, short_id, username, display_name, avatar_url, bio, is_online, is_admin, is_banned, created_at')
+      .select('id, short_id, username, display_name, avatar_url, bio, is_online, is_admin, is_banned, last_active_at, created_at')
       .eq('id', session.userId)
       .maybeSingle()
 
@@ -32,11 +32,16 @@ export async function GET() {
       return res
     }
 
-    // Ping active timestamp
-    await supabase
-      .from('profiles')
-      .update({ is_online: true, last_active_at: new Date().toISOString() })
-      .eq('id', profile.id)
+    // Preserve admin's offline/invisible choice
+    const shouldBeOnline = profile.is_admin ? Boolean(profile.is_online) : true
+
+    if (shouldBeOnline !== profile.is_online) {
+      await supabase
+        .from('profiles')
+        .update({ is_online: true, last_active_at: new Date().toISOString() })
+        .eq('id', profile.id)
+      profile.is_online = true
+    }
 
     return NextResponse.json({ user: profile })
   } catch (err: any) {

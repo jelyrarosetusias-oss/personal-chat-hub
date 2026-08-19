@@ -90,15 +90,52 @@ CREATE INDEX idx_messages_conv ON messages(conversation_id, created_at);
 CREATE INDEX idx_messages_sender ON messages(sender_id);
 
 -- ============================================================
--- 6. Enable RLS
+-- 7. Social Feed (Posts, Likes, Comments, Reposts)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS posts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  author_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  content TEXT,
+  media_url TEXT,
+  media_type TEXT DEFAULT 'image' CHECK (media_type IN ('image', 'video')),
+  repost_of_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS post_likes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS post_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  author_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id);
+
+-- ============================================================
+-- 8. Enable RLS
 -- ============================================================
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversation_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE message_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_comments ENABLE ROW LEVEL SECURITY;
 
--- Public read/write policies (simplified for MVP — tighten for production)
+-- Public read/write policies
 CREATE POLICY "public_read_profiles" ON profiles FOR SELECT USING (true);
 CREATE POLICY "public_update_profiles" ON profiles FOR UPDATE USING (true);
 CREATE POLICY "public_insert_profiles" ON profiles FOR INSERT WITH CHECK (true);
@@ -121,11 +158,26 @@ CREATE POLICY "public_insert_messages" ON messages FOR INSERT WITH CHECK (true);
 CREATE POLICY "public_update_messages" ON messages FOR UPDATE USING (true);
 CREATE POLICY "public_delete_messages" ON messages FOR DELETE USING (true);
 
+CREATE POLICY "public_read_posts" ON posts FOR SELECT USING (true);
+CREATE POLICY "public_insert_posts" ON posts FOR INSERT WITH CHECK (true);
+CREATE POLICY "public_delete_posts" ON posts FOR DELETE USING (true);
+
+CREATE POLICY "public_read_likes" ON post_likes FOR SELECT USING (true);
+CREATE POLICY "public_insert_likes" ON post_likes FOR INSERT WITH CHECK (true);
+CREATE POLICY "public_delete_likes" ON post_likes FOR DELETE USING (true);
+
+CREATE POLICY "public_read_comments" ON post_comments FOR SELECT USING (true);
+CREATE POLICY "public_insert_comments" ON post_comments FOR INSERT WITH CHECK (true);
+CREATE POLICY "public_delete_comments" ON post_comments FOR DELETE USING (true);
+
 -- ============================================================
--- 7. Enable Supabase Realtime
+-- 9. Enable Supabase Realtime
 -- ============================================================
 ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
 ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
 ALTER PUBLICATION supabase_realtime ADD TABLE conversation_members;
 ALTER PUBLICATION supabase_realtime ADD TABLE message_requests;
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE posts;
+ALTER PUBLICATION supabase_realtime ADD TABLE post_likes;
+ALTER PUBLICATION supabase_realtime ADD TABLE post_comments;
