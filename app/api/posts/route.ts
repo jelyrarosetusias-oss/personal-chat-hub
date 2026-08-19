@@ -10,10 +10,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ posts: [] })
     }
 
-    // 1. Fetch recent posts
+    // 1. Fetch recent posts (includes media_urls + updated_at)
     const { data: posts, error } = await supabase
       .from('posts')
-      .select('id, author_id, content, media_url, media_type, repost_of_id, created_at')
+      .select('id, author_id, content, media_url, media_urls, media_type, repost_of_id, updated_at, created_at')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -29,19 +29,19 @@ export async function GET(req: NextRequest) {
     const postIds = posts.map((p) => p.id)
     const repostTargetIds = Array.from(new Set(posts.map((p) => p.repost_of_id).filter(Boolean))) as string[]
 
-    // 2. Parallel queries for likes, comments, repost counts, and target repost posts
+    // 2. Parallel queries
     const [likesRes, commentsRes, repostRowsRes, repostTargetsRes] = await Promise.all([
       supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds),
       supabase.from('post_comments').select('id, post_id').in('post_id', postIds),
       supabase.from('posts').select('repost_of_id').in('repost_of_id', postIds),
       repostTargetIds.length > 0
-        ? supabase.from('posts').select('id, author_id, content, media_url, media_type, created_at').in('id', repostTargetIds)
+        ? supabase.from('posts').select('id, author_id, content, media_url, media_urls, media_type, created_at').in('id', repostTargetIds)
         : Promise.resolve({ data: [] })
     ])
 
     const repostTargets = (repostTargetsRes as any)?.data || []
 
-    // 3. Collect all author IDs (both post authors and reposted post authors)
+    // 3. Collect all author IDs
     const allAuthorIds = Array.from(
       new Set([
         ...posts.map((p) => p.author_id),
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       ].filter(Boolean))
     ) as string[]
 
-    // 4. Fetch all author profiles in one batch
+    // 4. Fetch all author profiles
     let profileMap: Record<string, any> = {}
     if (allAuthorIds.length > 0) {
       const { data: profiles } = await supabase
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 5. Index likes by post_id
+    // 5. Index likes
     const likesMap: Record<string, { count: number; isLiked: boolean }> = {}
     if (likesRes.data) {
       for (const row of likesRes.data) {
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 6. Index comments count by post_id
+    // 6. Index comments count
     const commentsCountMap: Record<string, number> = {}
     if (commentsRes.data) {
       for (const row of commentsRes.data) {
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 7. Index repost count by repost_of_id
+    // 7. Index repost count
     const repostCounts: Record<string, number> = {}
     if (repostRowsRes.data) {
       for (const row of repostRowsRes.data) {
@@ -101,6 +101,7 @@ export async function GET(req: NextRequest) {
     for (const r of repostTargets) {
       repostTargetMap[r.id] = {
         ...r,
+        media_urls: resolveMediaUrls(r),
         author: profileMap[r.author_id] || {
           id: r.author_id,
           display_name: 'User',
@@ -132,6 +133,7 @@ export async function GET(req: NextRequest) {
         author,
         content: p.content,
         media_url: p.media_url,
+        media_urls: resolveMediaUrls(p),
         media_type: p.media_type,
         repost_of_id: p.repost_of_id,
         repost_of: p.repost_of_id ? repostTargetMap[p.repost_of_id] || null : null,
@@ -139,6 +141,7 @@ export async function GET(req: NextRequest) {
         comments_count: commentsCountMap[p.id] || 0,
         reposts_count: repostCounts[p.id] || 0,
         is_liked_by_me: likeInfo.isLiked,
+        updated_at: p.updated_at,
         created_at: p.created_at
       }
     })
@@ -157,9 +160,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { content, media_url, media_type, repost_of_id } = await req.json()
+    const { content, media_url, media_urls, media_type, repost_of_id } = await req.json()
 
-    if (!content?.trim() && !media_url && !repost_of_id) {
+    // Resolve final media_urls array
+    const finalMediaUrls: string[] = media_urls && Array.isArray(media_urls) && media_urls.length > 0
+      ? media_urls
+      : media_url ? [media_url] : []
+
+    if (!content?.trim() && finalMediaUrls.length === 0 && !repost_of_id) {
       return NextResponse.json({ error: 'Post must have content, image, or repost reference' }, { status: 400 })
     }
 
@@ -183,17 +191,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'You are banned and cannot publish posts' }, { status: 403 })
     }
 
-    // Insert new post without fragile relational joins
     const { data: newPost, error: insertErr } = await supabase
       .from('posts')
       .insert({
         author_id: session.userId,
         content: content?.trim() || null,
-        media_url: media_url || null,
-        media_type: media_type || (media_url ? 'image' : undefined),
+        media_url: finalMediaUrls[0] || null,
+        media_urls: JSON.stringify(finalMediaUrls),
+        media_type: media_type || (finalMediaUrls.length > 0 ? 'image' : null),
         repost_of_id: repost_of_id || null
       })
-      .select('id, author_id, content, media_url, media_type, repost_of_id, created_at')
+      .select('id, author_id, content, media_url, media_urls, media_type, repost_of_id, updated_at, created_at')
       .single()
 
     if (insertErr || !newPost) {
@@ -201,12 +209,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insertErr?.message || 'Failed to create post' }, { status: 500 })
     }
 
-    // If this is a repost, fetch the target post and its author
+    // If this is a repost, fetch the target
     let repostTarget = null
     if (newPost.repost_of_id) {
       const { data: targetPost } = await supabase
         .from('posts')
-        .select('id, author_id, content, media_url, media_type, created_at')
+        .select('id, author_id, content, media_url, media_urls, media_type, created_at')
         .eq('id', newPost.repost_of_id)
         .single()
 
@@ -219,6 +227,7 @@ export async function POST(req: NextRequest) {
 
         repostTarget = {
           ...targetPost,
+          media_urls: resolveMediaUrls(targetPost),
           author: targetAuthor || null
         }
       }
@@ -226,6 +235,7 @@ export async function POST(req: NextRequest) {
 
     const formattedPost = {
       ...newPost,
+      media_urls: resolveMediaUrls(newPost),
       author: {
         id: session.userId,
         short_id: userProfile.short_id,
@@ -248,3 +258,20 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// Helper: resolve media_urls from both old media_url and new media_urls columns
+function resolveMediaUrls(post: any): string[] {
+  // media_urls could be a JSON string or already-parsed array
+  let urls: string[] = []
+  if (post.media_urls) {
+    if (typeof post.media_urls === 'string') {
+      try { urls = JSON.parse(post.media_urls) } catch { urls = [] }
+    } else if (Array.isArray(post.media_urls)) {
+      urls = post.media_urls
+    }
+  }
+  // Backwards compat: if media_urls is empty but media_url exists, use it
+  if (urls.length === 0 && post.media_url) {
+    urls = [post.media_url]
+  }
+  return urls.filter(Boolean)
+}

@@ -97,8 +97,10 @@ CREATE TABLE IF NOT EXISTS posts (
   author_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   content TEXT,
   media_url TEXT,
+  media_urls JSONB DEFAULT '[]',
   media_type TEXT DEFAULT 'image' CHECK (media_type IN ('image', 'video')),
   repost_of_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -115,6 +117,7 @@ CREATE TABLE IF NOT EXISTS post_comments (
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   author_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
+  parent_comment_id UUID REFERENCES post_comments(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -122,6 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_comment_parent ON post_comments(parent_comment_id);
 
 -- ============================================================
 -- 8. Enable RLS

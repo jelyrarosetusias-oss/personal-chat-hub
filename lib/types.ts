@@ -74,6 +74,7 @@ export interface Post {
   author?: UserProfile
   content?: string | null
   media_url?: string | null
+  media_urls?: string[]
   media_type?: 'image' | 'video'
   repost_of_id?: string | null
   repost_of?: Post | null
@@ -81,6 +82,7 @@ export interface Post {
   comments_count: number
   reposts_count: number
   is_liked_by_me?: boolean
+  updated_at?: string | null
   created_at: string
 }
 
@@ -90,6 +92,8 @@ export interface PostComment {
   author_id: string
   author?: UserProfile
   content: string
+  parent_comment_id?: string | null
+  replies?: PostComment[]
   created_at: string
 }
 

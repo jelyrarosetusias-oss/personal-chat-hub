@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { data: comments, error } = await supabase
       .from('post_comments')
-      .select('id, post_id, author_id, content, created_at')
+      .select('id, post_id, author_id, content, parent_comment_id, created_at')
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
 
@@ -39,8 +39,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    const formattedComments = comments.map((c: any) => ({
-      ...c,
+    const formattedList = comments.map((c: any) => ({
+      id: c.id,
+      post_id: c.post_id,
+      author_id: c.author_id,
+      content: c.content,
+      parent_comment_id: c.parent_comment_id || null,
+      created_at: c.created_at,
       author: profileMap[c.author_id] || {
         id: c.author_id,
         display_name: 'User',
@@ -48,10 +53,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         short_id: '000000',
         avatar_url: null,
         is_admin: false
-      }
+      },
+      replies: [] as any[]
     }))
 
-    return NextResponse.json({ comments: formattedComments })
+    // Nest replies under parents in-memory
+    const commentMap: Record<string, any> = {}
+    const topLevelComments: any[] = []
+
+    for (const item of formattedList) {
+      commentMap[item.id] = item
+    }
+
+    for (const item of formattedList) {
+      if (item.parent_comment_id && commentMap[item.parent_comment_id]) {
+        commentMap[item.parent_comment_id].replies.push(item)
+      } else {
+        topLevelComments.push(item)
+      }
+    }
+
+    return NextResponse.json({ comments: topLevelComments })
   } catch (err: any) {
     console.error('Fetch post comments error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
@@ -66,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const { id: postId } = await params
-    const { content } = await req.json()
+    const { content, parent_comment_id } = await req.json()
 
     if (!content?.trim()) {
       return NextResponse.json({ error: 'Comment text is required' }, { status: 400 })
@@ -93,9 +115,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .insert({
         post_id: postId,
         author_id: session.userId,
-        content: content.trim()
+        content: content.trim(),
+        parent_comment_id: parent_comment_id || null
       })
-      .select('id, post_id, author_id, content, created_at')
+      .select('id, post_id, author_id, content, parent_comment_id, created_at')
       .single()
 
     if (insertErr || !newComment) {
@@ -104,7 +127,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const formattedComment = {
       ...newComment,
-      author: profile
+      author: profile,
+      replies: []
     }
 
     return NextResponse.json({ success: true, comment: formattedComment })

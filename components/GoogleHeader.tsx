@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { UserProfile } from '@/lib/types'
-import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown, Eye, EyeOff, Newspaper } from 'lucide-react'
+import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown, Eye, EyeOff, Newspaper, User } from 'lucide-react'
 import Link from 'next/link'
 
 interface GoogleHeaderProps {
@@ -218,6 +218,16 @@ export default function GoogleHeader({
                   <span>Admin Dashboard</span>
                 </Link>
               )}
+
+              {/* View Profile */}
+              <Link
+                href={`/profile/${currentUser.id}`}
+                onClick={() => setShowMenu(false)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-[#3c4043] rounded-xl hover:bg-[#f1f4f8] transition-colors cursor-pointer"
+              >
+                <User className="w-4 h-4 text-[#5f6368]" />
+                <span>View Profile Page</span>
+              </Link>
 
               {/* Edit Profile */}
               <button
