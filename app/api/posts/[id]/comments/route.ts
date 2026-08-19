@@ -12,16 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { data: comments, error } = await supabase
       .from('post_comments')
-      .select(`
-        id,
-        post_id,
-        author_id,
-        content,
-        created_at,
-        author:profiles!post_comments_author_id_fkey(
-          id, short_id, username, display_name, avatar_url, is_admin
-        )
-      `)
+      .select('id, post_id, author_id, content, created_at')
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
 
@@ -29,7 +20,38 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ comments: comments || [] })
+    if (!comments || comments.length === 0) {
+      return NextResponse.json({ comments: [] })
+    }
+
+    const authorIds = Array.from(new Set(comments.map((c) => c.author_id).filter(Boolean)))
+    let profileMap: Record<string, any> = {}
+    if (authorIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, short_id, username, display_name, avatar_url, is_admin')
+        .in('id', authorIds)
+
+      if (profiles) {
+        for (const p of profiles) {
+          profileMap[p.id] = p
+        }
+      }
+    }
+
+    const formattedComments = comments.map((c: any) => ({
+      ...c,
+      author: profileMap[c.author_id] || {
+        id: c.author_id,
+        display_name: 'User',
+        username: 'user',
+        short_id: '000000',
+        avatar_url: null,
+        is_admin: false
+      }
+    }))
+
+    return NextResponse.json({ comments: formattedComments })
   } catch (err: any) {
     console.error('Fetch post comments error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
