@@ -46,6 +46,7 @@ export interface ChatMessage {
   sender_id: string
   sender_name?: string
   sender_avatar?: string
+  sender_is_admin?: boolean
   content: string
   media_url?: string
   media_type?: 'image' | 'video'

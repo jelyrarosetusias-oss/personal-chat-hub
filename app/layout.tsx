@@ -5,8 +5,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600', '700'] })
 
 export const metadata: Metadata = {
-  title: 'Direct Message | Personal Contact Hub',
-  description: 'Send a direct message — a personal, real-time messaging page replacing social media DMs.',
+  title: '⍙⌖⍜⌰⏃⍀⟟⌇',
+  description: '⌿⍀⍜⏁⍜☊⍜⌰ ⏁⍀⏃⋏⌇⋔⟟⌇⌇⟟⍜⋏',
 }
 
 export const viewport = {

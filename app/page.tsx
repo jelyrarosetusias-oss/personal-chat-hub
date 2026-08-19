@@ -405,7 +405,7 @@ export default function Home() {
       <div className="h-screen flex items-center justify-center p-4 bg-[#f8fafb]">
         <div className="flex items-center gap-2.5 text-xs text-[#5f6368]">
           <div className="w-4 h-4 border-2 border-[#1a73e8] border-t-transparent rounded-full animate-spin" />
-          <span>Loading Chat Hub...</span>
+          <span className="font-mono tracking-widest">⍙⌖⍜⌰⏃⍀⟟⌇...</span>
         </div>
       </div>
     )

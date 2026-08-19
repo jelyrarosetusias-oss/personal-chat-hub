@@ -14,6 +14,7 @@ import {
   Trash2,
   Ban,
   ShieldAlert,
+  Shield,
   Send
 } from 'lucide-react'
 
@@ -337,9 +338,21 @@ export default function ChatSidebar({
                     {/* Chat preview */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-xs font-semibold text-[#1f1f1f] truncate">
-                          {title}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-xs font-semibold text-[#1f1f1f] truncate">
+                            {title}
+                          </span>
+                          {!isGroup && otherMember?.is_admin && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#fef7e0] text-[#b06000] border border-[#fce8b2] shrink-0">
+                              <Shield className="w-2.5 h-2.5" /> SUPPORT
+                            </span>
+                          )}
+                          {currentUser.is_admin && isGroup && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#e8f0fe] text-[#1a73e8] border border-[#d2e3fc] shrink-0">
+                              GROUP
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-[#9aa0a6] shrink-0 ml-1">
                           {formatTime(conv.last_message?.created_at || conv.created_at)}
                         </span>

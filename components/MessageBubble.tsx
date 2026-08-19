@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { ChatMessage, DEFAULT_AVATAR } from '@/lib/types'
-import { X, Maximize2, Smile, Undo2, Check, CheckCheck } from 'lucide-react'
+import { X, Maximize2, Smile, Undo2, Check, CheckCheck, Shield } from 'lucide-react'
 
 const REACTION_EMOJIS = ['❤️', '😂', '👍', '🔥', '😮', '😢']
 
@@ -99,11 +99,20 @@ export default function MessageBubble({
 
       {/* Bubble Container */}
       <div className={`max-w-[82%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
-        {/* Group Sender Name (Only shown on FIRST message of cluster in groups) */}
-        {!isMine && showSenderName && (
-          <span className="text-[10px] font-semibold text-[#5f6368] mb-0.5 ml-1">
-            {message.sender_name || 'User'}
-          </span>
+        {/* Sender Name & Admin Badge */}
+        {((!isMine && showSenderName) || message.sender_is_admin) && (
+          <div className={`flex items-center gap-1 mb-0.5 ${isMine ? 'mr-1' : 'ml-1'}`}>
+            {!isMine && showSenderName && (
+              <span className="text-[10px] font-semibold text-[#5f6368]">
+                {message.sender_name || 'User'}
+              </span>
+            )}
+            {message.sender_is_admin && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#fef7e0] text-[#b06000] border border-[#fce8b2]">
+                <Shield className="w-2.5 h-2.5" /> ADMIN
+              </span>
+            )}
+          </div>
         )}
 
         {/* Bubble + Actions */}

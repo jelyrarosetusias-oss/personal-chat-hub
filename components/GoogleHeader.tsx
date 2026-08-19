@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { UserProfile } from '@/lib/types'
 import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
@@ -20,7 +20,12 @@ export default function GoogleHeader({
 }: GoogleHeaderProps) {
   const [showMenu, setShowMenu] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [isOnlineState, setIsOnlineState] = useState(currentUser.is_online ?? true)
   const [togglingStatus, setTogglingStatus] = useState(false)
+
+  useEffect(() => {
+    setIsOnlineState(currentUser.is_online ?? true)
+  }, [currentUser.is_online])
 
   const handleCopyId = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -29,23 +34,32 @@ export default function GoogleHeader({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleToggleAdminStatus = async () => {
+  const handleToggleAdminStatus = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
     if (!currentUser.is_admin || togglingStatus) return
+
+    const nextOnline = !isOnlineState
+    // Instant 0ms visual feedback
+    setIsOnlineState(nextOnline)
     setTogglingStatus(true)
-    const newOnline = !currentUser.is_online
 
     try {
       const res = await fetch('/api/admin/active-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_online: newOnline, active_status_hidden: !newOnline })
+        body: JSON.stringify({ is_online: nextOnline })
       })
       const data = await res.json()
-      if (res.ok && data.user && onUserUpdate) {
-        onUserUpdate(data.user)
+      if (res.ok && data.user) {
+        if (onUserUpdate) onUserUpdate(data.user)
+      } else {
+        // Rollback on error
+        setIsOnlineState(!nextOnline)
       }
     } catch (err) {
       console.error('Active status toggle error:', err)
+      setIsOnlineState(!nextOnline)
     } finally {
       setTogglingStatus(false)
     }
@@ -60,14 +74,14 @@ export default function GoogleHeader({
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <h1 className="text-sm sm:text-base font-bold text-[#1f1f1f] leading-none truncate">Chat Hub</h1>
+            <h1 className="text-sm sm:text-base font-mono font-bold text-[#1f1f1f] leading-none tracking-widest truncate select-none">⍙⌖⍜⌰⏃⍀⟟⌇</h1>
             {currentUser.is_admin && (
               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#fef7e0] text-[#b06000] border border-[#fce8b2] shrink-0">
                 <Shield className="w-2.5 h-2.5" /> ADMIN
               </span>
             )}
           </div>
-          <p className="text-[10px] sm:text-[11px] text-[#5f6368] leading-tight hidden sm:block truncate">Direct & Group Messaging</p>
+          <p className="text-[10px] sm:text-[11px] font-mono text-[#9aa0a6] leading-tight hidden sm:block truncate select-none tracking-wider">⏁⍀⏃⋏⌇⋔⟟⌇⌇⟟⍜⋏</p>
         </div>
       </div>
 
@@ -83,7 +97,7 @@ export default function GoogleHeader({
               alt={currentUser.display_name}
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f1f4f8] object-cover ring-1 ring-[#e8eaed]"
             />
-            {currentUser.is_online ? (
+            {isOnlineState ? (
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#1e8e3e] ring-2 ring-white" />
             ) : (
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#9aa0a6] ring-2 ring-white" />
@@ -126,20 +140,27 @@ export default function GoogleHeader({
               {/* Admin Active Status Toggle (Admin Only) */}
               {currentUser.is_admin && (
                 <button
+                  type="button"
                   onClick={handleToggleAdminStatus}
                   disabled={togglingStatus}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-xl transition-colors ${
-                    currentUser.is_online
-                      ? 'bg-[#e6f4ea] text-[#137333] hover:bg-[#ceead6]'
-                      : 'bg-[#f1f4f8] text-[#5f6368] hover:bg-[#e8eaed]'
+                  className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition-all cursor-pointer select-none active:scale-[0.98] ${
+                    isOnlineState
+                      ? 'bg-[#e6f4ea] text-[#137333] hover:bg-[#ceead6] border border-[#ceead6]'
+                      : 'bg-[#f1f4f8] text-[#5f6368] hover:bg-[#e8eaed] border border-[#dadce0]'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    {currentUser.is_online ? <Eye className="w-4 h-4 text-[#1e8e3e]" /> : <EyeOff className="w-4 h-4 text-[#5f6368]" />}
-                    <span>{currentUser.is_online ? 'Active Status: ON' : 'Active Status: OFF'}</span>
+                    {isOnlineState ? (
+                      <Eye className="w-4 h-4 text-[#1e8e3e]" />
+                    ) : (
+                      <EyeOff className="w-4 h-4 text-[#5f6368]" />
+                    )}
+                    <span>{isOnlineState ? 'Active Status: ON' : 'Active Status: OFF'}</span>
                   </div>
-                  <span className="text-[10px] font-bold uppercase">
-                    {currentUser.is_online ? 'Visible' : 'Hidden'}
+                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md ${
+                    isOnlineState ? 'bg-[#1e8e3e] text-white' : 'bg-[#9aa0a6] text-white'
+                  }`}>
+                    {isOnlineState ? 'Visible' : 'Hidden'}
                   </span>
                 </button>
               )}
@@ -158,11 +179,12 @@ export default function GoogleHeader({
 
               {/* Edit Profile */}
               <button
+                type="button"
                 onClick={() => {
                   setShowMenu(false)
                   onOpenProfileModal()
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-[#3c4043] rounded-xl hover:bg-[#f1f4f8] transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-[#3c4043] rounded-xl hover:bg-[#f1f4f8] transition-colors cursor-pointer"
               >
                 <Edit3 className="w-4 h-4 text-[#5f6368]" />
                 <span>Edit Profile & Avatar</span>
@@ -170,11 +192,12 @@ export default function GoogleHeader({
 
               {/* Sign Out */}
               <button
+                type="button"
                 onClick={() => {
                   setShowMenu(false)
                   onSignOut()
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-[#d93025] rounded-xl hover:bg-[#fce8e6] transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-[#d93025] rounded-xl hover:bg-[#fce8e6] transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4 text-[#d93025]" />
                 <span>Sign Out</span>

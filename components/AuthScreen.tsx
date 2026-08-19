@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { UserProfile, DEFAULT_AVATAR } from '@/lib/types'
-import { MessageSquare, Upload, Copy, Check, ArrowRight, UserCheck, Camera } from 'lucide-react'
+import { MessageSquare, Upload, Copy, Check, ArrowRight, UserCheck, Camera, Eye, EyeOff } from 'lucide-react'
 
 interface AuthScreenProps {
   onAuthSuccess: (user: UserProfile) => void
@@ -14,11 +14,13 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   // Login State
   const [loginIdentifier, setLoginIdentifier] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
   
   // Signup State
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
+  const [showSignupPassword, setShowSignupPassword] = useState(false)
   const [customAvatar, setCustomAvatar] = useState<string | null>(null)
   
   // UI State
@@ -152,7 +154,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             onClick={() => onAuthSuccess(createdUser)}
             className="w-full py-3.5 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0] active:scale-[0.99] text-white font-semibold text-sm transition-all shadow-md flex items-center justify-center gap-2"
           >
-            <span>Enter Chat Hub</span>
+            <span className="font-mono tracking-wider">⟒⋏⏁⟒⍀</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -169,8 +171,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center mx-auto shadow-md">
             <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#1f1f1f]">Chat Hub</h1>
-          <p className="text-xs text-[#5f6368]">Connect, group chat, and direct message with friends using short IDs</p>
+          <h1 className="text-xl sm:text-2xl font-mono font-bold text-[#1f1f1f] tracking-widest select-none">⍙⌖⍜⌰⏃⍀⟟⌇</h1>
+          <p className="text-xs font-mono text-[#9aa0a6] select-none tracking-widest">⌿⍀⍜⏁⍜☊⍜⌰ • ⏁⍀⏃⋏⌇⋔⟟⌇⌇⟟⍜⋏</p>
         </div>
 
         {/* Tab Switcher */}
@@ -218,14 +220,24 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
             <div className="space-y-1">
               <label className="text-xs font-semibold text-[#3c4043]">Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#dadce0] focus:border-[#1a73e8] focus:ring-2 focus:ring-[#1a73e8]/20 outline-none text-sm text-[#1f1f1f] bg-[#f8fafb] focus:bg-white transition-all"
-              />
+              <div className="relative">
+                <input
+                  type={showLoginPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-[#dadce0] focus:border-[#1a73e8] focus:ring-2 focus:ring-[#1a73e8]/20 outline-none text-sm text-[#1f1f1f] bg-[#f8fafb] focus:bg-white transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9aa0a6] hover:text-[#5f6368] transition-colors p-1"
+                  title={showLoginPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <button
@@ -313,15 +325,25 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
             <div className="space-y-1">
               <label className="text-xs font-semibold text-[#3c4043]">Password</label>
-              <input
-                type="password"
-                placeholder="At least 4 characters"
-                value={signupPassword}
-                onChange={(e) => setSignupPassword(e.target.value)}
-                required
-                minLength={4}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#dadce0] focus:border-[#1a73e8] focus:ring-2 focus:ring-[#1a73e8]/20 outline-none text-sm text-[#1f1f1f] bg-[#f8fafb] focus:bg-white transition-all"
-              />
+              <div className="relative">
+                <input
+                  type={showSignupPassword ? 'text' : 'password'}
+                  placeholder="At least 4 characters"
+                  value={signupPassword}
+                  onChange={(e) => setSignupPassword(e.target.value)}
+                  required
+                  minLength={4}
+                  className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-[#dadce0] focus:border-[#1a73e8] focus:ring-2 focus:ring-[#1a73e8]/20 outline-none text-sm text-[#1f1f1f] bg-[#f8fafb] focus:bg-white transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSignupPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9aa0a6] hover:text-[#5f6368] transition-colors p-1"
+                  title={showSignupPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <button

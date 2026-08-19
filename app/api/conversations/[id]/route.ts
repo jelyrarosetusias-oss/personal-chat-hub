@@ -39,13 +39,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         created_at,
         members:conversation_members(
           role,
-          user:profiles(id, short_id, username, display_name, avatar_url, bio, is_online, last_active_at)
+          user:profiles(id, short_id, username, display_name, avatar_url, bio, is_online, last_active_at, is_admin)
         )
       `)
       .eq('id', id)
       .single()
 
-    // 3. Fetch messages
+    // 3. Fetch messages with sender admin status
     const { data: messages, error: msgErr } = await supabase
       .from('messages')
       .select(`
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         unsent,
         seen_by,
         created_at,
-        sender:profiles!messages_sender_id_fkey(id, short_id, username, display_name, avatar_url)
+        sender:profiles!messages_sender_id_fkey(id, short_id, username, display_name, avatar_url, is_admin)
       `)
       .eq('conversation_id', id)
       .order('created_at', { ascending: true })
@@ -74,6 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       sender_id: m.sender_id,
       sender_name: m.sender?.display_name || m.sender?.username || 'User',
       sender_avatar: m.sender?.avatar_url,
+      sender_is_admin: Boolean(m.sender?.is_admin),
       content: m.content,
       media_url: m.media_url,
       media_type: m.media_type,
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Verify user is not banned
     const { data: userProfile } = await supabase
       .from('profiles')
-      .select('is_banned, display_name, avatar_url')
+      .select('is_banned, display_name, avatar_url, is_admin')
       .eq('id', session.userId)
       .single()
 
@@ -150,7 +151,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'You are banned and cannot send messages' }, { status: 403 })
     }
 
-    // Verify user is member of conversation
+    const isUserAdmin = Boolean(session.isAdmin || userProfile?.is_admin)
+
+    // Verify user is member of conversation (Admin can post to any conversation)
     const { data: membership } = await supabase
       .from('conversation_members')
       .select('role')
@@ -158,8 +161,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .eq('user_id', session.userId)
       .maybeSingle()
 
-    if (!membership && !session.isAdmin) {
+    if (!membership && !isUserAdmin) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+    }
+
+    // If admin is posting to a conversation they are not yet explicitly joined to, add them as admin member
+    if (!membership && isUserAdmin) {
+      await supabase.from('conversation_members').insert({
+        conversation_id: id,
+        user_id: session.userId,
+        role: 'admin'
+      })
     }
 
     const { data: newMsg, error: insertErr } = await supabase
@@ -186,7 +198,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       message: {
         ...newMsg,
         sender_name: userProfile?.display_name || session.username,
-        sender_avatar: userProfile?.avatar_url
+        sender_avatar: userProfile?.avatar_url,
+        sender_is_admin: isUserAdmin
       }
     })
   } catch (err: any) {
