@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate } from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
 import { UserProfile, Conversation, ChatMessage, MessageRequest } from '@/lib/types'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
@@ -15,6 +15,7 @@ import MessageInput from '@/components/MessageInput'
 import ProfileModal from '@/components/ProfileModal'
 import CreateGroupModal from '@/components/CreateGroupModal'
 import { MessageSquare } from 'lucide-react'
+import { playNotificationSound, showDeviceNotification } from '@/lib/sound-notifications'
 
 export default function Home() {
   // Main Tab: 'feed' (Social Media) or 'chat' (Messaging)
@@ -195,6 +196,37 @@ export default function Home() {
         () => {
           mutateConversations()
           mutateActiveConv()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          const newNotif = payload.new as any
+          if (newNotif.recipient_id === currentUser.id) {
+            // Play melodic audio chime
+            playNotificationSound()
+
+            // Revalidate notifications SWR cache
+            mutate('/api/notifications')
+
+            // Trigger OS / Mobile background device popup
+            const actionLabel =
+              newNotif.type === 'like'
+                ? 'liked your post ❤️'
+                : newNotif.type === 'comment'
+                ? 'commented on your post 💬'
+                : newNotif.type === 'reply'
+                ? 'replied to your comment ↩️'
+                : newNotif.type === 'repost'
+                ? 'reposted your post 🔁'
+                : 'sent you a message 📩'
+
+            showDeviceNotification('New Activity! 🔔', {
+              body: `Someone ${actionLabel}`,
+              tag: `notif-${newNotif.id}`
+            })
+          }
         }
       )
       .on('broadcast', { event: 'typing' }, (payload) => {

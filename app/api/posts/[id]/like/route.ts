@@ -41,6 +41,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           user_id: session.userId
         })
       liked = true
+
+      // Trigger notification for post author (if not self-like)
+      try {
+        const { data: post } = await supabase
+          .from('posts')
+          .select('author_id')
+          .eq('id', postId)
+          .single()
+
+        if (post && post.author_id !== session.userId) {
+          await supabase.from('notifications').insert({
+            recipient_id: post.author_id,
+            actor_id: session.userId,
+            type: 'like',
+            post_id: postId
+          })
+        }
+      } catch (notifErr) {
+        console.warn('Like notification error:', notifErr)
+      }
     }
 
     // Fetch total likes count

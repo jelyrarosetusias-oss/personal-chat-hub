@@ -230,6 +230,21 @@ export async function POST(req: NextRequest) {
           media_urls: resolveMediaUrls(targetPost),
           author: targetAuthor || null
         }
+
+        // Trigger notification for the original post author
+        if (targetPost.author_id !== session.userId) {
+          try {
+            await supabase.from('notifications').insert({
+              recipient_id: targetPost.author_id,
+              actor_id: session.userId,
+              type: 'repost',
+              post_id: newPost.id,
+              content_preview: content?.slice(0, 80) || null
+            })
+          } catch (notifErr) {
+            console.warn('Repost notification trigger error:', notifErr)
+          }
+        }
       }
     }
 

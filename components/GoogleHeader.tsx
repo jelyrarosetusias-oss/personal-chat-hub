@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { UserProfile } from '@/lib/types'
 import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown, Eye, EyeOff, Newspaper, User } from 'lucide-react'
 import Link from 'next/link'
+import NotificationBell from '@/components/NotificationBell'
 
 interface GoogleHeaderProps {
   currentUser: UserProfile
@@ -127,18 +128,21 @@ export default function GoogleHeader({
         </div>
       )}
 
-      {/* User Account Controls */}
-      <div className="relative shrink-0">
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 pr-2 sm:pr-3 rounded-full hover:bg-[#f1f4f8] border border-[#e8eaed] transition-colors group"
-        >
-          <div className="relative">
-            <img
-              src={currentUser.avatar_url}
-              alt={currentUser.display_name}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f1f4f8] object-cover ring-1 ring-[#e8eaed]"
-            />
+      {/* User & Notification Controls */}
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <NotificationBell currentUserId={currentUser.id} />
+
+        <div className="relative shrink-0">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 pr-2 sm:pr-3 rounded-full hover:bg-[#f1f4f8] border border-[#e8eaed] transition-colors group"
+          >
+            <div className="relative">
+              <img
+                src={currentUser.avatar_url}
+                alt={currentUser.display_name}
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f1f4f8] object-cover ring-1 ring-[#e8eaed]"
+              />
             {isOnlineState ? (
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#1e8e3e] ring-2 ring-white" />
             ) : (

@@ -125,6 +125,51 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: insertErr?.message || 'Failed to post comment' }, { status: 500 })
     }
 
+    // Trigger notification
+    try {
+      const contentSnippet = content.trim().slice(0, 80)
+
+      if (parent_comment_id) {
+        // Notification for the parent comment author
+        const { data: parentComment } = await supabase
+          .from('post_comments')
+          .select('author_id')
+          .eq('id', parent_comment_id)
+          .single()
+
+        if (parentComment && parentComment.author_id !== session.userId) {
+          await supabase.from('notifications').insert({
+            recipient_id: parentComment.author_id,
+            actor_id: session.userId,
+            type: 'reply',
+            post_id: postId,
+            comment_id: newComment.id,
+            content_preview: contentSnippet
+          })
+        }
+      } else {
+        // Notification for the post author
+        const { data: post } = await supabase
+          .from('posts')
+          .select('author_id')
+          .eq('id', postId)
+          .single()
+
+        if (post && post.author_id !== session.userId) {
+          await supabase.from('notifications').insert({
+            recipient_id: post.author_id,
+            actor_id: session.userId,
+            type: 'comment',
+            post_id: postId,
+            comment_id: newComment.id,
+            content_preview: contentSnippet
+          })
+        }
+      }
+    } catch (notifErr) {
+      console.warn('Comment notification trigger error:', notifErr)
+    }
+
     const formattedComment = {
       ...newComment,
       author: profile,

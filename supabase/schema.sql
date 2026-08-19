@@ -128,7 +128,26 @@ CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id);
 CREATE INDEX IF NOT EXISTS idx_comment_parent ON post_comments(parent_comment_id);
 
 -- ============================================================
--- 8. Enable RLS
+-- 8. Notifications (Likes, Comments, Replies, Reposts, Messages)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  actor_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('like', 'comment', 'reply', 'repost', 'message')),
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+  comment_id UUID REFERENCES post_comments(id) ON DELETE CASCADE,
+  message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+  content_preview TEXT,
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(recipient_id, is_read);
+
+-- ============================================================
+-- 9. Enable RLS
 -- ============================================================
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
@@ -138,6 +157,7 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE post_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE post_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- Public read/write policies
 CREATE POLICY "public_read_profiles" ON profiles FOR SELECT USING (true);
@@ -174,8 +194,13 @@ CREATE POLICY "public_read_comments" ON post_comments FOR SELECT USING (true);
 CREATE POLICY "public_insert_comments" ON post_comments FOR INSERT WITH CHECK (true);
 CREATE POLICY "public_delete_comments" ON post_comments FOR DELETE USING (true);
 
+CREATE POLICY "public_read_notifications" ON notifications FOR SELECT USING (true);
+CREATE POLICY "public_insert_notifications" ON notifications FOR INSERT WITH CHECK (true);
+CREATE POLICY "public_update_notifications" ON notifications FOR UPDATE USING (true);
+CREATE POLICY "public_delete_notifications" ON notifications FOR DELETE USING (true);
+
 -- ============================================================
--- 9. Enable Supabase Realtime
+-- 10. Enable Supabase Realtime
 -- ============================================================
 ALTER PUBLICATION supabase_realtime ADD TABLE profiles;
 ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
@@ -185,3 +210,4 @@ ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE posts;
 ALTER PUBLICATION supabase_realtime ADD TABLE post_likes;
 ALTER PUBLICATION supabase_realtime ADD TABLE post_comments;
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
