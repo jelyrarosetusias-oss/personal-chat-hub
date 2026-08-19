@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react'
 import { UserProfile, Conversation } from '@/lib/types'
-import { ArrowLeft, Users, User, Shield, Info, MoreVertical, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Users, Info, Copy, Check } from 'lucide-react'
+import { formatOfflineDuration } from '@/lib/time-utils'
 
 interface ChatHeaderProps {
   currentUser: UserProfile
@@ -85,7 +86,7 @@ export default function ChatHeader({
                 <span className="w-1.5 h-1.5 rounded-full bg-[#1e8e3e]" /> Online now
               </span>
             ) : (
-              <span>Offline {otherMember?.bio ? `• "${otherMember.bio}"` : ''}</span>
+              <span>{formatOfflineDuration(otherMember?.last_active_at)} {otherMember?.bio ? `• "${otherMember.bio}"` : ''}</span>
             )}
           </p>
         </div>

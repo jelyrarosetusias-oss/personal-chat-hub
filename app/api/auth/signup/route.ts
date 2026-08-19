@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { generateShortId, hashPassword, createSessionToken, COOKIE_NAME } from '@/lib/auth'
+import { DEFAULT_AVATAR } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
   try {
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     const passwordHash = await hashPassword(password)
     const isAdmin = cleanUsername === 'dars' || cleanUsername === 'darskie' || cleanUsername === 'admin'
-    const finalAvatar = avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanUsername}`
+    const finalAvatar = avatar_url || DEFAULT_AVATAR
 
     const { data: profile, error } = await supabase
       .from('profiles')

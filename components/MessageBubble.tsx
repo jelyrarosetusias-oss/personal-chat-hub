@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { ChatMessage } from '@/lib/types'
+import { ChatMessage, DEFAULT_AVATAR } from '@/lib/types'
 import { X, Maximize2, Smile, Undo2, Check, CheckCheck } from 'lucide-react'
 
 const REACTION_EMOJIS = ['❤️', '😂', '👍', '🔥', '😮', '😢']
@@ -9,6 +9,8 @@ const REACTION_EMOJIS = ['❤️', '😂', '👍', '🔥', '😮', '😢']
 interface MessageBubbleProps {
   message: ChatMessage
   currentUserId: string
+  showAvatar?: boolean
+  showSenderName?: boolean
   onReact: (messageId: string, emoji: string) => void
   onUnsend: (messageId: string) => void
 }
@@ -16,6 +18,8 @@ interface MessageBubbleProps {
 export default function MessageBubble({
   message,
   currentUserId,
+  showAvatar = true,
+  showSenderName = false,
   onReact,
   onUnsend
 }: MessageBubbleProps) {
@@ -34,27 +38,33 @@ export default function MessageBubble({
     }
   }
 
-  const defaultAvatar = message.sender_avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${message.sender_id}`
+  const defaultAvatar = message.sender_avatar || DEFAULT_AVATAR
 
   // Collect reactions
   const reactions = message.reactions || {}
   const reactionEntries = Object.entries(reactions).filter(([, reactors]) => reactors.length > 0)
 
+  // Has any recipient seen this message?
+  const isSeenByRecipient = Boolean(
+    message.seen_by && message.seen_by.some((id) => id !== currentUserId)
+  )
+
   if (message.unsent) {
     return (
-      <div className={`flex items-end gap-2.5 my-2.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
-        <img
-          src={defaultAvatar}
-          alt={message.sender_name || 'User'}
-          className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-[#e8eaed] opacity-40"
-        />
-        <div className={`max-w-[78%] sm:max-w-[62%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
-          <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isMine ? 'flex-row-reverse' : ''}`}>
-            <span className="font-semibold text-[#9aa0a6]">{message.sender_name || 'User'}</span>
-            <span className="text-[#dadce0]">•</span>
-            <span className="text-[#dadce0]">{formatTime(message.created_at)}</span>
-          </div>
-          <div className="px-4 py-2.5 text-[0.8125rem] italic text-[#9aa0a6] bg-[#f1f4f8] rounded-[1.25rem] border border-dashed border-[#dadce0]">
+      <div className={`flex items-end gap-2 my-1.5 ${isMine ? 'justify-end' : 'justify-start'}`}>
+        {!isMine && (
+          showAvatar ? (
+            <img
+              src={defaultAvatar}
+              alt=""
+              className="w-7 h-7 rounded-full object-cover shrink-0 ring-1 ring-[#e8eaed] opacity-40 mb-0.5"
+            />
+          ) : (
+            <div className="w-7 shrink-0" />
+          )
+        )}
+        <div className={`max-w-[80%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+          <div className="px-3.5 py-2 text-xs italic text-[#9aa0a6] bg-[#f1f4f8] rounded-[1.25rem] border border-dashed border-[#dadce0]">
             ⚠️ This message was unsent
           </div>
         </div>
@@ -64,31 +74,37 @@ export default function MessageBubble({
 
   const isVideo = message.media_type === 'video'
 
-  const handleBubbleClick = (e: React.MouseEvent) => {
+  const handleBubbleClick = () => {
     setShowReactionPicker((prev) => !prev)
     setShowContextMenu(false)
   }
 
   return (
     <div
-      className={`group flex items-end gap-2.5 my-2.5 relative ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
+      className={`group flex items-end gap-2 my-1 relative ${isMine ? 'justify-end' : 'justify-start'}`}
       onMouseLeave={() => { setShowReactionPicker(false); setShowContextMenu(false) }}
     >
-      {/* Avatar */}
-      <img
-        src={defaultAvatar}
-        alt={message.sender_name || 'Avatar'}
-        className="w-8 h-8 rounded-full object-cover shrink-0 ring-1 ring-[#e8eaed]"
-      />
+      {/* Respondent Avatar (Only shown on the LAST message of a cluster, like Messenger) */}
+      {!isMine && (
+        showAvatar ? (
+          <img
+            src={defaultAvatar}
+            alt={message.sender_name || 'Avatar'}
+            className="w-7 h-7 rounded-full bg-[#f1f4f8] object-cover shrink-0 ring-1 ring-[#e8eaed] mb-0.5"
+          />
+        ) : (
+          <div className="w-7 shrink-0" />
+        )
+      )}
 
       {/* Bubble Container */}
-      <div className={`max-w-[85%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
-        {/* Sender + Time */}
-        <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isMine ? 'flex-row-reverse' : ''}`}>
-          <span className="font-semibold text-[#3c4043]">{message.sender_name || 'User'}</span>
-          <span className="text-[#9aa0a6]">•</span>
-          <span className="text-[#9aa0a6]">{formatTime(message.created_at)}</span>
-        </div>
+      <div className={`max-w-[82%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+        {/* Group Sender Name (Only shown on FIRST message of cluster in groups) */}
+        {!isMine && showSenderName && (
+          <span className="text-[10px] font-semibold text-[#5f6368] mb-0.5 ml-1">
+            {message.sender_name || 'User'}
+          </span>
+        )}
 
         {/* Bubble + Actions */}
         <div className="relative">
@@ -196,7 +212,7 @@ export default function MessageBubble({
           ) : (
             <div
               onClick={handleBubbleClick}
-              className={`p-3 text-[0.8125rem] leading-relaxed break-words space-y-2 cursor-pointer transition-all active:scale-[0.99] select-none ${
+              className={`px-3.5 py-2 text-[0.8125rem] leading-relaxed break-words space-y-2 cursor-pointer transition-all active:scale-[0.99] select-none ${
                 isMine
                   ? 'bg-[#1a73e8] text-white rounded-[1.25rem] rounded-br-[0.375rem] shadow-sm'
                   : 'bg-[#f1f4f8] text-[#1f1f1f] rounded-[1.25rem] rounded-bl-[0.375rem] border border-[#e8eaed]'
@@ -272,7 +288,7 @@ export default function MessageBubble({
         </div>
 
         {/* Reaction Chips & Seen Status */}
-        <div className={`flex items-center gap-2 mt-1 w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
+        <div className={`flex items-center gap-2 mt-0.5 w-full ${isMine ? 'justify-end' : 'justify-start'}`}>
           {reactionEntries.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {reactionEntries.map(([emoji, reactors]) => {
@@ -300,13 +316,13 @@ export default function MessageBubble({
 
           {/* Seen Status for sender's messages */}
           {isMine && (
-            <div className="flex items-center gap-1 text-[10px] text-[#9aa0a6] select-none shrink-0">
-              {message.seen_by && message.seen_by.length > 1 ? (
-                <span className="flex items-center gap-0.5 text-[#1a73e8] font-medium">
-                  <CheckCheck className="w-3 h-3" /> Seen
+            <div className="flex items-center gap-1 text-[10px] select-none shrink-0 ml-1">
+              {isSeenByRecipient ? (
+                <span className="flex items-center gap-0.5 text-[#1a73e8] font-semibold text-[10px]">
+                  <CheckCheck className="w-3.5 h-3.5 text-[#1a73e8]" /> Seen
                 </span>
               ) : (
-                <span className="flex items-center gap-0.5">
+                <span className="flex items-center gap-0.5 text-[#9aa0a6] text-[10px]">
                   <Check className="w-3 h-3" /> Sent
                 </span>
               )}

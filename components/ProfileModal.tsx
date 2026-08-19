@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
-import { UserProfile } from '@/lib/types'
-import { X, RefreshCw, Check } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { UserProfile, DEFAULT_AVATAR } from '@/lib/types'
+import { X, Upload, Trash2, Camera } from 'lucide-react'
 
 interface ProfileModalProps {
   user: UserProfile
@@ -13,13 +13,30 @@ interface ProfileModalProps {
 export default function ProfileModal({ user, onSave, onClose }: ProfileModalProps) {
   const [displayName, setDisplayName] = useState(user.display_name)
   const [bio, setBio] = useState(user.bio || '')
-  const [avatarUrl, setAvatarUrl] = useState(user.avatar_url)
+  const [avatarUrl, setAvatarUrl] = useState(user.avatar_url || DEFAULT_AVATAR)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleRegenerateAvatar = () => {
-    const seed = `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-    setAvatarUrl(`https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`)
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      try {
+        const imageCompression = (await import('browser-image-compression')).default
+        const compressed = await imageCompression(file, { maxSizeMB: 0.15, maxWidthOrHeight: 500, useWebWorker: true })
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) setAvatarUrl(event.target.result as string)
+        }
+        reader.readAsDataURL(compressed)
+      } catch {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) setAvatarUrl(event.target.result as string)
+        }
+        reader.readAsDataURL(file)
+      }
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,24 +92,58 @@ export default function ProfileModal({ user, onSave, onClose }: ProfileModalProp
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Avatar customizer */}
-          <div className="flex items-center gap-4 p-3.5 rounded-2xl bg-[#f8fafb] border border-[#e8eaed]">
-            <img
-              src={avatarUrl}
-              alt="Avatar"
-              className="w-14 h-14 rounded-full bg-white object-cover ring-2 ring-[#1a73e8]/30 shrink-0"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-[#1f1f1f]">Avatar Image</p>
-              <p className="text-[10px] text-[#5f6368]">Click to roll a new random look</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleAvatarUpload}
+          />
+
+          <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#f8fafb] border border-[#e8eaed]">
+            <div className="relative shrink-0">
+              <img
+                src={avatarUrl}
+                alt="Avatar"
+                className="w-14 h-14 rounded-full bg-[#f1f4f8] object-cover ring-2 ring-[#1a73e8]/30"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 p-1 bg-[#1a73e8] text-white rounded-full hover:bg-[#1557b0] shadow-sm transition-transform active:scale-95"
+                title="Change photo"
+              >
+                <Camera className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleRegenerateAvatar}
-              className="p-2 rounded-xl bg-white border border-[#dadce0] hover:bg-[#f1f4f8] text-[#1a73e8] text-xs flex items-center gap-1 font-medium transition-colors shrink-0"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Roll</span>
-            </button>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-[#1f1f1f]">Profile Photo</p>
+              <p className="text-[10px] text-[#5f6368]">Upload custom image or use default</p>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 rounded-xl bg-white border border-[#dadce0] hover:bg-[#f1f4f8] text-[#1a73e8] text-xs flex items-center gap-1 font-medium transition-colors"
+                title="Upload Photo"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline">Upload</span>
+              </button>
+
+              {avatarUrl !== DEFAULT_AVATAR && (
+                <button
+                  type="button"
+                  onClick={() => setAvatarUrl(DEFAULT_AVATAR)}
+                  className="p-2 rounded-xl bg-white border border-[#dadce0] hover:bg-[#fce8e6] text-[#d93025] text-xs font-medium transition-colors"
+                  title="Reset to default"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-1">

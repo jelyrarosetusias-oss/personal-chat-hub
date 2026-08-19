@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
-import { UserProfile } from '@/lib/types'
-import { MessageSquare, Sparkles, RefreshCw, Copy, Check, ArrowRight, ShieldCheck, UserCheck } from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { UserProfile, DEFAULT_AVATAR } from '@/lib/types'
+import { MessageSquare, Upload, Copy, Check, ArrowRight, UserCheck, Camera } from 'lucide-react'
 
 interface AuthScreenProps {
   onAuthSuccess: (user: UserProfile) => void
@@ -19,19 +19,34 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
-  const [avatarSeed, setAvatarSeed] = useState(() => `user-${Math.floor(Math.random() * 10000)}`)
-  const [bio, setBio] = useState('')
+  const [customAvatar, setCustomAvatar] = useState<string | null>(null)
   
   // UI State
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdUser, setCreatedUser] = useState<UserProfile | null>(null)
   const [copied, setCopied] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
-  const currentAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`
-
-  const handleRegenerateAvatar = () => {
-    setAvatarSeed(`user-${Date.now()}-${Math.floor(Math.random() * 1000)}`)
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      try {
+        const imageCompression = (await import('browser-image-compression')).default
+        const compressed = await imageCompression(file, { maxSizeMB: 0.15, maxWidthOrHeight: 500, useWebWorker: true })
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) setCustomAvatar(event.target.result as string)
+        }
+        reader.readAsDataURL(compressed)
+      } catch {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) setCustomAvatar(event.target.result as string)
+        }
+        reader.readAsDataURL(file)
+      }
+    }
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -75,8 +90,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           display_name: displayName,
           username,
           password: signupPassword,
-          avatar_url: currentAvatarUrl,
-          bio
+          avatar_url: customAvatar || DEFAULT_AVATAR
         })
       })
       const data = await res.json()
@@ -229,25 +243,46 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         ) : (
           /* SIGNUP FORM */
           <form onSubmit={handleSignup} className="space-y-4">
-            {/* Avatar Selector */}
+            {/* Optional Avatar Upload with Default Silhouette */}
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
+
             <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#f8fafb] border border-[#e8eaed]">
-              <img
-                src={currentAvatarUrl}
-                alt="Avatar Preview"
-                className="w-12 h-12 rounded-full bg-white object-cover ring-2 ring-[#1a73e8]/30 shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-[#1f1f1f]">Your Avatar</p>
-                <p className="text-[10px] text-[#5f6368]">Randomly generated character</p>
+              <div className="relative">
+                <img
+                  src={customAvatar || DEFAULT_AVATAR}
+                  alt="Profile"
+                  className="w-12 h-12 rounded-full bg-[#f1f4f8] object-cover ring-2 ring-[#e8eaed] shrink-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 p-1 bg-[#1a73e8] text-white rounded-full hover:bg-[#1557b0] shadow-sm transition-transform active:scale-95"
+                  title="Upload profile picture"
+                >
+                  <Camera className="w-3 h-3" />
+                </button>
               </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-[#1f1f1f]">Profile Picture</p>
+                <p className="text-[10px] text-[#5f6368]">
+                  {customAvatar ? 'Custom photo chosen' : 'Default photo (Optional upload)'}
+                </p>
+              </div>
+
               <button
                 type="button"
-                onClick={handleRegenerateAvatar}
-                className="p-2 rounded-xl bg-white border border-[#dadce0] hover:bg-[#f1f4f8] text-[#1a73e8] text-xs flex items-center gap-1 font-medium transition-colors shrink-0"
-                title="Generate new avatar"
+                onClick={() => avatarInputRef.current?.click()}
+                className="px-2.5 py-1.5 rounded-xl bg-white border border-[#dadce0] hover:bg-[#f1f4f8] text-[#1a73e8] text-xs font-semibold flex items-center gap-1 transition-colors shrink-0"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>New</span>
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload</span>
               </button>
             </div>
 
@@ -274,17 +309,6 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-[#dadce0] focus:border-[#1a73e8] focus:ring-2 focus:ring-[#1a73e8]/20 outline-none text-sm text-[#1f1f1f] bg-[#f8fafb] focus:bg-white transition-all"
               />
               <p className="text-[10px] text-[#9aa0a6]">Only lowercase letters, numbers, and underscores</p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-[#3c4043]">Bio (Optional)</label>
-              <input
-                type="text"
-                placeholder="e.g. Software Engineer / Photographer"
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#dadce0] focus:border-[#1a73e8] focus:ring-2 focus:ring-[#1a73e8]/20 outline-none text-sm text-[#1f1f1f] bg-[#f8fafb] focus:bg-white transition-all"
-              />
             </div>
 
             <div className="space-y-1">

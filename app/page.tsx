@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import useSWR, { mutate } from 'swr'
+import React, { useState, useEffect, useRef } from 'react'
+import useSWR from 'swr'
 import { fetcher } from '@/lib/swr-fetcher'
 import { UserProfile, Conversation, ChatMessage, MessageRequest } from '@/lib/types'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
@@ -87,9 +87,12 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
   }
 
+  // Handle selected conversation change & mark as seen
   useEffect(() => {
     if (selectedConvId) {
       setMobileView('chat')
+      // Mark messages in this conversation as seen
+      fetch(`/api/conversations/${selectedConvId}/seen`, { method: 'POST' }).catch(() => {})
     } else {
       setMessages([])
     }
@@ -113,9 +116,13 @@ export default function Home() {
         (payload) => {
           const newMsg = payload.new as any
           if (newMsg.conversation_id === selectedConvId) {
+            // Auto mark seen if from other user
+            if (newMsg.sender_id !== currentUser.id) {
+              fetch(`/api/conversations/${selectedConvId}/seen`, { method: 'POST' }).catch(() => {})
+            }
+
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev
-              // Remove any temp placeholder with same content
               const filtered = prev.filter(
                 (m) => !(m.id.startsWith('temp-') && m.content === newMsg.content && m.sender_id === newMsg.sender_id)
               )
@@ -333,8 +340,6 @@ export default function Home() {
 
   // 9. Accept / Decline Request (Optimistic UI updates)
   const handleAcceptRequest = async (requestId: string) => {
-    const req = incomingRequests.find((r) => r.id === requestId)
-    // Optimistically update SWR cache
     mutateRequests(
       (current: any) => ({
         ...current,
@@ -426,6 +431,7 @@ export default function Home() {
         currentUser={currentUser}
         onOpenProfileModal={() => setShowProfileModal(true)}
         onSignOut={handleSignOut}
+        onUserUpdate={(updated) => mutateSession({ user: updated }, false)}
       />
 
       {/* Main App Body */}
@@ -446,6 +452,10 @@ export default function Home() {
             onDeclineRequest={handleDeclineRequest}
             onOpenCreateGroup={() => setShowCreateGroupModal(true)}
             onRequestSent={() => mutateRequests()}
+            onConversationsChange={() => {
+              mutateConversations()
+              if (selectedConvId) setSelectedConvId(null)
+            }}
           />
         </div>
 
@@ -464,8 +474,8 @@ export default function Home() {
                 onBack={() => setMobileView('sidebar')}
               />
 
-              {/* Messages Viewport */}
-              <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-1">
+              {/* Messages Viewport with Messenger-Style Clustering */}
+              <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4 scroll-smooth space-y-0.5">
                 {messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#5f6368] space-y-2">
                     <div className="w-12 h-12 rounded-full bg-[#e8f0fe] text-[#1a73e8] flex items-center justify-center">
@@ -477,15 +487,24 @@ export default function Home() {
                     </p>
                   </div>
                 ) : (
-                  messages.map((msg) => (
-                    <MessageBubble
-                      key={msg.id}
-                      message={msg}
-                      currentUserId={currentUser.id}
-                      onReact={handleReact}
-                      onUnsend={handleUnsend}
-                    />
-                  ))
+                  messages.map((msg, idx) => {
+                    const nextMsg = messages[idx + 1]
+                    const prevMsg = messages[idx - 1]
+                    const isLastInCluster = !nextMsg || nextMsg.sender_id !== msg.sender_id || nextMsg.unsent
+                    const isFirstInCluster = !prevMsg || prevMsg.sender_id !== msg.sender_id || prevMsg.unsent
+
+                    return (
+                      <MessageBubble
+                        key={msg.id}
+                        message={msg}
+                        currentUserId={currentUser.id}
+                        showAvatar={isLastInCluster}
+                        showSenderName={isFirstInCluster && activeConv?.type === 'group'}
+                        onReact={handleReact}
+                        onUnsend={handleUnsend}
+                      />
+                    )
+                  })
                 )}
 
                 {/* Live Typing Indicator */}

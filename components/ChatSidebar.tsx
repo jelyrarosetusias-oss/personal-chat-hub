@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { UserProfile, Conversation, MessageRequest } from '@/lib/types'
+import { UserProfile, Conversation, MessageRequest, DEFAULT_AVATAR } from '@/lib/types'
 import {
   MessageSquare,
   Users,
@@ -10,9 +10,10 @@ import {
   Check,
   X,
   Plus,
-  Clock,
-  Sparkles,
-  ArrowRight,
+  MoreVertical,
+  Trash2,
+  Ban,
+  ShieldAlert,
   Send
 } from 'lucide-react'
 
@@ -27,6 +28,7 @@ interface ChatSidebarProps {
   onDeclineRequest: (requestId: string) => void
   onOpenCreateGroup: () => void
   onRequestSent: () => void
+  onConversationsChange?: () => void
 }
 
 export default function ChatSidebar({
@@ -39,7 +41,8 @@ export default function ChatSidebar({
   onAcceptRequest,
   onDeclineRequest,
   onOpenCreateGroup,
-  onRequestSent
+  onRequestSent,
+  onConversationsChange
 }: ChatSidebarProps) {
   const [activeTab, setActiveTab] = useState<'chats' | 'requests' | 'search'>('chats')
   const [searchQuery, setSearchQuery] = useState('')
@@ -51,6 +54,10 @@ export default function ChatSidebar({
   const [selectedSearchUser, setSelectedSearchUser] = useState<UserProfile | null>(null)
   const [requestSentSuccess, setRequestSentSuccess] = useState(false)
 
+  // Sidebar item context menu
+  const [activeMenuConvId, setActiveMenuConvId] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+
   // Filter conversations by search term when in 'chats' tab
   const [convFilter, setConvFilter] = useState('')
 
@@ -60,7 +67,6 @@ export default function ChatSidebar({
     if (c.type === 'group') {
       return c.name?.toLowerCase().includes(term)
     }
-    // For DMs, find other member's name
     const otherMember = c.members?.find((m) => m.id !== currentUser.id)
     return (
       otherMember?.display_name.toLowerCase().includes(term) ||
@@ -129,6 +135,68 @@ export default function ChatSidebar({
       setSearchError(err.message || 'Network error')
     } finally {
       setSendingRequestId(null)
+    }
+  }
+
+  // Delete Conversation
+  const handleDeleteConversation = async (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm('Delete this conversation? It will be removed from your chat list.')) return
+    setActionLoading(true)
+    try {
+      const res = await fetch(`/api/conversations/${convId}/delete`, { method: 'POST' })
+      if (res.ok && onConversationsChange) {
+        onConversationsChange()
+      }
+    } catch (err) {
+      console.error('Delete conv error:', err)
+    } finally {
+      setActionLoading(false)
+      setActiveMenuConvId(null)
+    }
+  }
+
+  // Block User
+  const handleBlockUser = async (targetUserId: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm(`Block ${name}? They will no longer be able to message you.`)) return
+    setActionLoading(true)
+    try {
+      const res = await fetch('/api/users/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_user_id: targetUserId, action: 'block' })
+      })
+      if (res.ok && onConversationsChange) {
+        onConversationsChange()
+      }
+    } catch (err) {
+      console.error('Block user error:', err)
+    } finally {
+      setActionLoading(false)
+      setActiveMenuConvId(null)
+    }
+  }
+
+  // Restrict User
+  const handleRestrictUser = async (targetUserId: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm(`Restrict ${name}? Their interactions will be limited.`)) return
+    setActionLoading(true)
+    try {
+      const res = await fetch('/api/users/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_user_id: targetUserId, action: 'restrict' })
+      })
+      if (res.ok && onConversationsChange) {
+        onConversationsChange()
+      }
+    } catch (err) {
+      console.error('Restrict user error:', err)
+    } finally {
+      setActionLoading(false)
+      setActiveMenuConvId(null)
     }
   }
 
@@ -234,22 +302,25 @@ export default function ChatSidebar({
                 const isGroup = conv.type === 'group'
                 const otherMember = !isGroup ? conv.members?.find((m) => m.id !== currentUser.id) : null
                 const title = isGroup ? conv.name : otherMember?.display_name || 'Direct Chat'
-                const avatar = isGroup ? conv.avatar_url : otherMember?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=dm`
+                const avatar = isGroup
+                  ? conv.avatar_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${conv.id}`
+                  : otherMember?.avatar_url || DEFAULT_AVATAR
                 const isOnline = otherMember?.is_online || false
                 const isSelected = selectedConvId === conv.id
+                const isMenuOpen = activeMenuConvId === conv.id
 
                 return (
-                  <button
+                  <div
                     key={conv.id}
                     onClick={() => onSelectConversation(conv.id)}
-                    className={`w-full p-3 flex items-start gap-3 text-left transition-colors relative ${
+                    className={`w-full p-3 flex items-start gap-3 text-left transition-colors relative cursor-pointer group ${
                       isSelected ? 'bg-[#e8f0fe]' : 'hover:bg-[#f8fafb]'
                     }`}
                   >
                     {/* Avatar with online badge */}
                     <div className="relative shrink-0">
                       <img
-                        src={avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${conv.id}`}
+                        src={avatar}
                         alt={title || 'Avatar'}
                         className="w-10 h-10 rounded-full bg-[#f1f4f8] object-cover ring-1 ring-[#e8eaed]"
                       />
@@ -288,7 +359,64 @@ export default function ChatSidebar({
                         )}
                       </p>
                     </div>
-                  </button>
+
+                    {/* Action 3-Dots Menu Trigger */}
+                    <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setActiveMenuConvId(isMenuOpen ? null : conv.id)
+                        }}
+                        className="p-1 rounded-full text-[#9aa0a6] hover:text-[#1f1f1f] hover:bg-[#e8eaed] transition-colors"
+                        title="Chat options"
+                      >
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {isMenuOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-30"
+                            onClick={() => setActiveMenuConvId(null)}
+                          />
+
+                          <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-[#e8eaed] p-1.5 z-40 animate-in fade-in zoom-in-95 duration-150 space-y-0.5 text-xs">
+                            <button
+                              onClick={(e) => handleDeleteConversation(conv.id, e)}
+                              disabled={actionLoading}
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[#d93025] hover:bg-[#fce8e6] font-medium transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete Chat</span>
+                            </button>
+
+                            {!isGroup && otherMember && (
+                              <>
+                                <button
+                                  onClick={(e) => handleBlockUser(otherMember.id, otherMember.display_name, e)}
+                                  disabled={actionLoading}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[#5f6368] hover:bg-[#f1f4f8] font-medium transition-colors"
+                                >
+                                  <Ban className="w-3.5 h-3.5 text-[#d93025]" />
+                                  <span>Block User</span>
+                                </button>
+
+                                <button
+                                  onClick={(e) => handleRestrictUser(otherMember.id, otherMember.display_name, e)}
+                                  disabled={actionLoading}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[#5f6368] hover:bg-[#f1f4f8] font-medium transition-colors"
+                                >
+                                  <ShieldAlert className="w-3.5 h-3.5 text-[#b06000]" />
+                                  <span>Restrict User</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )
               })
             )}
@@ -319,7 +447,7 @@ export default function ChatSidebar({
                 >
                   <div className="flex items-center gap-2.5">
                     <img
-                      src={req.from_user?.avatar_url}
+                      src={req.from_user?.avatar_url || DEFAULT_AVATAR}
                       alt={req.from_user?.display_name}
                       className="w-9 h-9 rounded-full bg-white object-cover ring-1 ring-[#e8eaed]"
                     />
@@ -374,7 +502,7 @@ export default function ChatSidebar({
                 >
                   <div className="flex items-center gap-2 truncate">
                     <img
-                      src={req.to_user?.avatar_url}
+                      src={req.to_user?.avatar_url || DEFAULT_AVATAR}
                       alt={req.to_user?.display_name}
                       className="w-7 h-7 rounded-full bg-white object-cover"
                     />
@@ -437,7 +565,7 @@ export default function ChatSidebar({
                 >
                   <div className="flex items-center gap-3">
                     <img
-                      src={user.avatar_url}
+                      src={user.avatar_url || DEFAULT_AVATAR}
                       alt={user.display_name}
                       className="w-10 h-10 rounded-full bg-white object-cover ring-1 ring-[#e8eaed]"
                     />

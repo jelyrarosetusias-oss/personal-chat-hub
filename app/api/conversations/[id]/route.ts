@@ -83,6 +83,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       created_at: m.created_at
     }))
 
+    // Automatically mark unread messages as seen
+    const unread = (messages || []).filter(
+      (m: any) => m.sender_id !== session.userId && !(m.seen_by || []).includes(session.userId)
+    )
+    if (unread.length > 0) {
+      Promise.all(
+        unread.map((m: any) =>
+          supabase
+            .from('messages')
+            .update({ seen_by: Array.from(new Set([...(m.seen_by || []), session.userId])) })
+            .eq('id', m.id)
+        )
+      ).catch((e) => console.error('Auto seen error:', e))
+    }
+
     const membersList = (conversation?.members || []).map((m: any) => m.user).filter(Boolean)
 
     return NextResponse.json({

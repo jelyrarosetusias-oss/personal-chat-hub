@@ -2,28 +2,53 @@
 
 import React, { useState } from 'react'
 import { UserProfile } from '@/lib/types'
-import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown } from 'lucide-react'
+import { MessageSquare, Shield, LogOut, Edit3, Copy, Check, ChevronDown, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 
 interface GoogleHeaderProps {
   currentUser: UserProfile
   onOpenProfileModal: () => void
   onSignOut: () => void
+  onUserUpdate?: (updated: UserProfile) => void
 }
 
 export default function GoogleHeader({
   currentUser,
   onOpenProfileModal,
-  onSignOut
+  onSignOut,
+  onUserUpdate
 }: GoogleHeaderProps) {
   const [showMenu, setShowMenu] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [togglingStatus, setTogglingStatus] = useState(false)
 
   const handleCopyId = (e: React.MouseEvent) => {
     e.stopPropagation()
     navigator.clipboard.writeText(currentUser.short_id)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleToggleAdminStatus = async () => {
+    if (!currentUser.is_admin || togglingStatus) return
+    setTogglingStatus(true)
+    const newOnline = !currentUser.is_online
+
+    try {
+      const res = await fetch('/api/admin/active-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_online: newOnline, active_status_hidden: !newOnline })
+      })
+      const data = await res.json()
+      if (res.ok && data.user && onUserUpdate) {
+        onUserUpdate(data.user)
+      }
+    } catch (err) {
+      console.error('Active status toggle error:', err)
+    } finally {
+      setTogglingStatus(false)
+    }
   }
 
   return (
@@ -58,7 +83,11 @@ export default function GoogleHeader({
               alt={currentUser.display_name}
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f1f4f8] object-cover ring-1 ring-[#e8eaed]"
             />
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#1e8e3e] ring-2 ring-white" />
+            {currentUser.is_online ? (
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#1e8e3e] ring-2 ring-white" />
+            ) : (
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#9aa0a6] ring-2 ring-white" />
+            )}
           </div>
 
           <div className="text-left hidden sm:block max-w-[120px]">
@@ -93,6 +122,27 @@ export default function GoogleHeader({
                 <p className="text-[11px] text-[#5f6368] truncate">@{currentUser.username}</p>
                 {currentUser.bio && <p className="text-[10px] text-[#5f6368] italic line-clamp-2">"{currentUser.bio}"</p>}
               </div>
+
+              {/* Admin Active Status Toggle (Admin Only) */}
+              {currentUser.is_admin && (
+                <button
+                  onClick={handleToggleAdminStatus}
+                  disabled={togglingStatus}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold rounded-xl transition-colors ${
+                    currentUser.is_online
+                      ? 'bg-[#e6f4ea] text-[#137333] hover:bg-[#ceead6]'
+                      : 'bg-[#f1f4f8] text-[#5f6368] hover:bg-[#e8eaed]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {currentUser.is_online ? <Eye className="w-4 h-4 text-[#1e8e3e]" /> : <EyeOff className="w-4 h-4 text-[#5f6368]" />}
+                    <span>{currentUser.is_online ? 'Active Status: ON' : 'Active Status: OFF'}</span>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase">
+                    {currentUser.is_online ? 'Visible' : 'Hidden'}
+                  </span>
+                </button>
+              )}
 
               {/* Admin Dashboard link */}
               {currentUser.is_admin && (
