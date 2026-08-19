@@ -105,9 +105,9 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   // If user just signed up, show Welcome & Short ID Screen
   if (createdUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-[#f8fafb] via-[#eef2f6] to-[#e3ecfc]">
-        <div className="w-full max-w-md bg-white rounded-3xl p-8 shadow-xl border border-[#e8eaed] text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
-          <div className="w-20 h-20 rounded-full mx-auto p-1 bg-gradient-to-tr from-[#1a73e8] to-[#34a853] shadow-md">
+      <div className="min-h-[100dvh] flex items-center justify-center p-3 sm:p-4 bg-gradient-to-br from-[#f8fafb] via-[#eef2f6] to-[#e3ecfc]">
+        <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-[#e8eaed] text-center space-y-5 sm:space-y-6 animate-in fade-in zoom-in-95 duration-200 my-auto max-h-[95dvh] overflow-y-auto">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto p-1 bg-gradient-to-tr from-[#1a73e8] to-[#34a853] shadow-md">
             <img src={createdUser.avatar_url} alt={createdUser.display_name} className="w-full h-full rounded-full bg-white object-cover" />
           </div>
 
@@ -115,15 +115,15 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#e6f4ea] text-[#137333] mb-2">
               <UserCheck className="w-3.5 h-3.5" /> Account Created!
             </span>
-            <h2 className="text-2xl font-bold text-[#1f1f1f]">Welcome, {createdUser.display_name}!</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-[#1f1f1f]">Welcome, {createdUser.display_name}!</h2>
             <p className="text-xs text-[#5f6368] mt-1">Here is your unique 6-character Short ID. Share it with friends so they can find and message you!</p>
           </div>
 
           {/* Short ID Card */}
-          <div className="p-4 rounded-2xl bg-[#f1f4f8] border border-[#dadce0] flex items-center justify-between">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-[#f1f4f8] border border-[#dadce0] flex items-center justify-between">
             <div className="text-left">
               <p className="text-[10px] uppercase tracking-wider font-bold text-[#5f6368]">Your Chat ID</p>
-              <p className="text-2xl font-mono font-extrabold text-[#1a73e8] tracking-widest">#{createdUser.short_id}</p>
+              <p className="text-xl sm:text-2xl font-mono font-extrabold text-[#1a73e8] tracking-widest">#{createdUser.short_id}</p>
             </div>
             <button
               onClick={handleCopyShortId}
@@ -147,15 +147,15 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-[#f8fafb] via-[#eef2f6] to-[#e3ecfc]">
-      <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-[#e8eaed] space-y-6 animate-in fade-in duration-200">
+    <div className="min-h-[100dvh] flex items-center justify-center p-3 sm:p-4 bg-gradient-to-br from-[#f8fafb] via-[#eef2f6] to-[#e3ecfc]">
+      <div className="w-full max-w-md bg-white rounded-3xl p-5 sm:p-8 shadow-xl border border-[#e8eaed] space-y-5 sm:space-y-6 animate-in fade-in duration-200 my-auto max-h-[95dvh] overflow-y-auto">
         
         {/* App Logo & Header */}
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center mx-auto shadow-md">
-            <MessageSquare className="w-7 h-7" />
+        <div className="text-center space-y-1.5 sm:space-y-2">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center mx-auto shadow-md">
+            <MessageSquare className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
-          <h1 className="text-2xl font-bold text-[#1f1f1f]">Chat Hub</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#1f1f1f]">Chat Hub</h1>
           <p className="text-xs text-[#5f6368]">Connect, group chat, and direct message with friends using short IDs</p>
         </div>
 

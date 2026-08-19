@@ -27,30 +27,30 @@ export default function GoogleHeader({
   }
 
   return (
-    <header className="flex items-center justify-between px-3.5 sm:px-6 py-2.5 sm:py-3 mb-2 sm:mb-4 bg-white/95 backdrop-blur-md rounded-2xl md-card border border-[#e8eaed] shrink-0 relative z-30">
+    <header className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 mb-1.5 sm:mb-3 bg-white/95 backdrop-blur-md rounded-2xl md-card border border-[#e8eaed] shrink-0 relative z-30">
       {/* Brand / Logo */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
-        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center shadow-sm">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] text-white flex items-center justify-center shadow-sm shrink-0">
           <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <h1 className="text-sm sm:text-base font-bold text-[#1f1f1f] leading-none">Chat Hub</h1>
+            <h1 className="text-sm sm:text-base font-bold text-[#1f1f1f] leading-none truncate">Chat Hub</h1>
             {currentUser.is_admin && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#fef7e0] text-[#b06000] border border-[#fce8b2]">
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-[#fef7e0] text-[#b06000] border border-[#fce8b2] shrink-0">
                 <Shield className="w-2.5 h-2.5" /> ADMIN
               </span>
             )}
           </div>
-          <p className="text-[10px] sm:text-[11px] text-[#5f6368] leading-tight hidden sm:block">Direct & Group Messaging</p>
+          <p className="text-[10px] sm:text-[11px] text-[#5f6368] leading-tight hidden sm:block truncate">Direct & Group Messaging</p>
         </div>
       </div>
 
       {/* User Account Controls */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center gap-2 p-1.5 pr-2.5 sm:pr-3 rounded-full hover:bg-[#f1f4f8] border border-[#e8eaed] transition-colors group"
+          className="flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 pr-2 sm:pr-3 rounded-full hover:bg-[#f1f4f8] border border-[#e8eaed] transition-colors group"
         >
           <div className="relative">
             <img
@@ -61,8 +61,8 @@ export default function GoogleHeader({
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-[#1e8e3e] ring-2 ring-white" />
           </div>
 
-          <div className="text-left hidden sm:block">
-            <p className="text-xs font-semibold text-[#1f1f1f] leading-none">{currentUser.display_name}</p>
+          <div className="text-left hidden sm:block max-w-[120px]">
+            <p className="text-xs font-semibold text-[#1f1f1f] leading-none truncate">{currentUser.display_name}</p>
             <p className="text-[10px] font-mono text-[#1a73e8] leading-none mt-0.5">#{currentUser.short_id}</p>
           </div>
 
@@ -74,7 +74,7 @@ export default function GoogleHeader({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
             
-            <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-[#e8eaed] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-1">
+            <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl shadow-xl border border-[#e8eaed] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-1">
               {/* Header Info */}
               <div className="p-3 bg-[#f8fafb] rounded-xl border border-[#e8eaed] space-y-1.5">
                 <div className="flex items-center justify-between">

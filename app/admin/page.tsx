@@ -141,29 +141,29 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="min-h-screen max-w-6xl mx-auto p-3 sm:p-6 space-y-4">
+    <main className="min-h-screen max-w-6xl mx-auto p-2.5 sm:p-6 space-y-3 sm:space-y-4">
       {/* Top Bar */}
-      <header className="flex items-center justify-between p-4 bg-white rounded-2xl md-card border border-[#e8eaed]">
-        <div className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:p-4 bg-white rounded-2xl md-card border border-[#e8eaed]">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <Link
             href="/"
-            className="p-2 rounded-xl bg-[#f1f4f8] hover:bg-[#e8eaed] text-[#5f6368] transition-colors"
+            className="p-2 rounded-xl bg-[#f1f4f8] hover:bg-[#e8eaed] text-[#5f6368] transition-colors shrink-0"
             title="Back to Chat Hub"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold text-[#1f1f1f]">Admin Control Panel</h1>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#fef7e0] text-[#b06000] border border-[#fce8b2]">
+              <h1 className="text-base sm:text-lg font-bold text-[#1f1f1f] truncate">Admin Control Panel</h1>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#fef7e0] text-[#b06000] border border-[#fce8b2] shrink-0">
                 <Shield className="w-3 h-3" /> SUPERADMIN
               </span>
             </div>
-            <p className="text-xs text-[#5f6368]">Monitor conversations, manage users, and enforce platform safety</p>
+            <p className="text-xs text-[#5f6368] hidden sm:block">Monitor conversations, manage users, and enforce platform safety</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => { fetchUsers(); fetchMessages() }}
             className="p-2 rounded-xl bg-[#f1f4f8] hover:bg-[#e8eaed] text-[#5f6368] text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -175,7 +175,7 @@ export default function AdminPage() {
       </header>
 
       {/* Tabs */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setActiveTab('users')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${

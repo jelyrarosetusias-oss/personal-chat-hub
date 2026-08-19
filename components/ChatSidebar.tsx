@@ -151,11 +151,11 @@ export default function ChatSidebar({
     <div className="w-full md:w-80 h-full flex flex-col bg-white rounded-2xl md-card border border-[#e8eaed] overflow-hidden shrink-0">
       {/* Header & Tabs */}
       <div className="p-3 border-b border-[#e8eaed] bg-[#f8fafb] space-y-2.5 shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 bg-[#e8eaed] p-1 rounded-xl">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex-1 flex items-center gap-1 bg-[#e8eaed] p-1 rounded-xl">
             <button
               onClick={() => setActiveTab('chats')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+              className={`flex-1 justify-center px-2 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1 sm:gap-1.5 ${
                 activeTab === 'chats' ? 'bg-white text-[#1a73e8] shadow-xs' : 'text-[#5f6368] hover:text-[#1f1f1f]'
               }`}
             >
@@ -165,7 +165,7 @@ export default function ChatSidebar({
 
             <button
               onClick={() => setActiveTab('requests')}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 relative ${
+              className={`flex-1 justify-center px-2 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1 sm:gap-1.5 relative ${
                 activeTab === 'requests' ? 'bg-white text-[#1a73e8] shadow-xs' : 'text-[#5f6368] hover:text-[#1f1f1f]'
               }`}
             >
@@ -180,7 +180,7 @@ export default function ChatSidebar({
 
             <button
               onClick={() => setActiveTab('search')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+              className={`flex-1 justify-center px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1 ${
                 activeTab === 'search' ? 'bg-white text-[#1a73e8] shadow-xs' : 'text-[#5f6368] hover:text-[#1f1f1f]'
               }`}
               title="Find by ID"
@@ -192,7 +192,7 @@ export default function ChatSidebar({
 
           <button
             onClick={onOpenCreateGroup}
-            className="p-1.5 rounded-xl bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] transition-colors"
+            className="p-1.5 rounded-xl bg-[#e8f0fe] hover:bg-[#d2e3fc] text-[#1a73e8] transition-colors shrink-0"
             title="Create Group Chat"
           >
             <Plus className="w-4 h-4" />

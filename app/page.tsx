@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import useSWR, { mutate } from 'swr'
+import { fetcher } from '@/lib/swr-fetcher'
 import { UserProfile, Conversation, ChatMessage, MessageRequest } from '@/lib/types'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
 import AuthScreen from '@/components/AuthScreen'
@@ -11,22 +13,65 @@ import MessageBubble from '@/components/MessageBubble'
 import MessageInput from '@/components/MessageInput'
 import ProfileModal from '@/components/ProfileModal'
 import CreateGroupModal from '@/components/CreateGroupModal'
-import { MessageSquare, Users, Sparkles, Send, UserPlus } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 
 export default function Home() {
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
-  const [authLoading, setAuthLoading] = useState(true)
+  // SWR: User Session (Cached in memory)
+  const { data: sessionData, isLoading: authLoading, mutate: mutateSession } = useSWR(
+    '/api/auth/session',
+    fetcher,
+    { revalidateOnFocus: true, dedupingInterval: 3000 }
+  )
+  const currentUser: UserProfile | null = sessionData?.user || null
 
-  // Chat State
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  // SWR: Conversations (Cached in memory with stale-while-revalidate)
+  const { data: convsData, mutate: mutateConversations } = useSWR(
+    currentUser ? '/api/conversations' : null,
+    fetcher,
+    { revalidateOnFocus: true, dedupingInterval: 2000 }
+  )
+  const conversations: Conversation[] = convsData?.conversations || []
+
+  // SWR: Message Requests
+  const { data: reqsData, mutate: mutateRequests } = useSWR(
+    currentUser ? '/api/requests' : null,
+    fetcher,
+    { revalidateOnFocus: true, dedupingInterval: 2000 }
+  )
+  const incomingRequests: MessageRequest[] = reqsData?.incoming || []
+  const outgoingRequests: MessageRequest[] = reqsData?.outgoing || []
+
+  // Active Chat State
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [activeConv, setActiveConv] = useState<Conversation | null>(null)
   const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>('sidebar')
 
-  // Requests State
-  const [incomingRequests, setIncomingRequests] = useState<MessageRequest[]>([])
-  const [outgoingRequests, setOutgoingRequests] = useState<MessageRequest[]>([])
+  // SWR: Active Conversation detail & messages
+  const { data: activeConvData, mutate: mutateActiveConv } = useSWR(
+    selectedConvId ? `/api/conversations/${selectedConvId}` : null,
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 2000 }
+  )
+
+  const activeConv: Conversation | null = activeConvData?.conversation || null
+
+  // Sync server messages into local state
+  useEffect(() => {
+    if (activeConvData?.messages) {
+      setMessages((prev) => {
+        // Keep optimistic messages that haven't finalized yet
+        const optimistic = prev.filter((m) => m.id.startsWith('temp-'))
+        const serverMsgs = activeConvData.messages as ChatMessage[]
+        const combined = [...serverMsgs]
+        for (const opt of optimistic) {
+          if (!combined.some((m) => m.content === opt.content && m.sender_id === opt.sender_id)) {
+            combined.push(opt)
+          }
+        }
+        return combined
+      })
+    }
+  }, [activeConvData])
 
   // Modals
   const [showProfileModal, setShowProfileModal] = useState(false)
@@ -42,99 +87,24 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
   }
 
-  // 1. Check current authenticated user session
-  const checkSession = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/session')
-      const data = await res.json()
-      if (data.user) {
-        setCurrentUser(data.user)
-      } else {
-        setCurrentUser(null)
-      }
-    } catch {
-      setCurrentUser(null)
-    } finally {
-      setAuthLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    checkSession()
-  }, [checkSession])
-
-  // 2. Fetch Conversations & Requests
-  const fetchConversations = useCallback(async () => {
-    if (!currentUser) return
-    try {
-      const res = await fetch('/api/conversations')
-      const data = await res.json()
-      if (res.ok && data.conversations) {
-        setConversations(data.conversations)
-      }
-    } catch (err) {
-      console.error('Fetch convs error:', err)
-    }
-  }, [currentUser])
-
-  const fetchRequests = useCallback(async () => {
-    if (!currentUser) return
-    try {
-      const res = await fetch('/api/requests')
-      const data = await res.json()
-      if (res.ok) {
-        setIncomingRequests(data.incoming || [])
-        setOutgoingRequests(data.outgoing || [])
-      }
-    } catch (err) {
-      console.error('Fetch requests error:', err)
-    }
-  }, [currentUser])
-
-  useEffect(() => {
-    if (currentUser) {
-      fetchConversations()
-      fetchRequests()
-    }
-  }, [currentUser, fetchConversations, fetchRequests])
-
-  // 3. Fetch active conversation messages
-  const fetchActiveMessages = useCallback(async (convId: string) => {
-    try {
-      const res = await fetch(`/api/conversations/${convId}`)
-      const data = await res.json()
-      if (res.ok) {
-        setMessages(data.messages || [])
-        if (data.conversation) {
-          setActiveConv(data.conversation)
-        }
-      }
-    } catch (err) {
-      console.error('Fetch active messages error:', err)
-    }
-  }, [])
-
   useEffect(() => {
     if (selectedConvId) {
-      fetchActiveMessages(selectedConvId)
       setMobileView('chat')
     } else {
-      setActiveConv(null)
       setMessages([])
     }
-  }, [selectedConvId, fetchActiveMessages])
+  }, [selectedConvId])
 
   useEffect(() => {
     scrollToBottom(false)
   }, [messages, typingUser, selectedConvId])
 
-  // 4. Supabase Realtime Listener
+  // Supabase Realtime Listener for instant live messages & typing broadcast
   useEffect(() => {
     if (!currentUser || !isSupabaseConfigured || !supabase) return
 
     const client = supabase
 
-    // Realtime channel for instant message delivery & typing broadcast
     const channel = client
       .channel('chat-global-realtime')
       .on(
@@ -142,12 +112,15 @@ export default function Home() {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const newMsg = payload.new as any
-          // If message belongs to active conversation, append it
           if (newMsg.conversation_id === selectedConvId) {
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev
+              // Remove any temp placeholder with same content
+              const filtered = prev.filter(
+                (m) => !(m.id.startsWith('temp-') && m.content === newMsg.content && m.sender_id === newMsg.sender_id)
+              )
               return [
-                ...prev,
+                ...filtered,
                 {
                   id: newMsg.id,
                   conversation_id: newMsg.conversation_id,
@@ -163,8 +136,7 @@ export default function Home() {
               ]
             })
           }
-          // Refresh conversation list to update last message preview
-          fetchConversations()
+          mutateConversations()
         }
       )
       .on(
@@ -202,34 +174,16 @@ export default function Home() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'message_requests' },
         () => {
-          fetchRequests()
-          fetchConversations()
+          mutateRequests()
+          mutateConversations()
         }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles' },
-        (payload) => {
-          const updatedProfile = payload.new as UserProfile
-          // Update in conversations member list if present
-          setConversations((prev) =>
-            prev.map((c) => ({
-              ...c,
-              members: c.members?.map((m) => (m.id === updatedProfile.id ? { ...m, ...updatedProfile } : m))
-            }))
-          )
-          if (activeConv) {
-            setActiveConv((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    members: prev.members?.map((m) =>
-                      m.id === updatedProfile.id ? { ...m, ...updatedProfile } : m
-                    )
-                  }
-                : null
-            )
-          }
+        () => {
+          mutateConversations()
+          mutateActiveConv()
         }
       )
       .on('broadcast', { event: 'typing' }, (payload) => {
@@ -245,9 +199,9 @@ export default function Home() {
     return () => {
       client.removeChannel(channel)
     }
-  }, [currentUser, selectedConvId, activeConv, fetchConversations, fetchRequests])
+  }, [currentUser, selectedConvId, mutateConversations, mutateRequests, mutateActiveConv])
 
-  // 5. Typing Indicator Trigger
+  // Typing Indicator Trigger
   const handleTyping = () => {
     if (!currentUser || !selectedConvId) return
 
@@ -281,9 +235,28 @@ export default function Home() {
     }, 2000)
   }
 
-  // 6. Send Message
+  // 6. Send Message (Optimistic 0ms UI update)
   const handleSendMessage = async (text: string, mediaUrl?: string, mediaType?: 'image' | 'video') => {
     if (!currentUser || !selectedConvId) return
+
+    const tempId = `temp-${Date.now()}`
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      conversation_id: selectedConvId,
+      sender_id: currentUser.id,
+      sender_name: currentUser.display_name,
+      sender_avatar: currentUser.avatar_url,
+      content: text,
+      media_url: mediaUrl,
+      media_type: mediaType,
+      reactions: {},
+      unsent: false,
+      seen_by: [currentUser.id],
+      created_at: new Date().toISOString()
+    }
+
+    // Instantly append to state — 0ms perceived lag
+    setMessages((prev) => [...prev, optimisticMsg])
 
     try {
       const res = await fetch(`/api/conversations/${selectedConvId}`, {
@@ -298,18 +271,18 @@ export default function Home() {
       const data = await res.json()
 
       if (res.ok && data.message) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === data.message.id)) return prev
-          return [...prev, data.message]
-        })
-        fetchConversations()
+        // Swap temp ID with real server ID
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? data.message : m))
+        )
+        mutateConversations()
       }
     } catch (err) {
       console.error('Send message error:', err)
     }
   }
 
-  // 7. React to Message
+  // 7. React to Message (Instant UI update)
   const handleReact = async (messageId: string, emoji: string) => {
     if (!currentUser) return
 
@@ -340,7 +313,7 @@ export default function Home() {
     }
   }
 
-  // 8. Unsend Message
+  // 8. Unsend Message (Instant UI update)
   const handleUnsend = async (messageId: string) => {
     setMessages((prev) =>
       prev.map((m) =>
@@ -358,8 +331,18 @@ export default function Home() {
     }
   }
 
-  // 9. Accept / Decline Request
+  // 9. Accept / Decline Request (Optimistic UI updates)
   const handleAcceptRequest = async (requestId: string) => {
+    const req = incomingRequests.find((r) => r.id === requestId)
+    // Optimistically update SWR cache
+    mutateRequests(
+      (current: any) => ({
+        ...current,
+        incoming: (current?.incoming || []).filter((r: any) => r.id !== requestId)
+      }),
+      false
+    )
+
     try {
       const res = await fetch(`/api/requests/${requestId}`, {
         method: 'PATCH',
@@ -368,25 +351,36 @@ export default function Home() {
       })
       const data = await res.json()
       if (res.ok && data.conversation_id) {
-        fetchRequests()
-        await fetchConversations()
+        await mutateConversations()
         setSelectedConvId(data.conversation_id)
+      } else {
+        mutateRequests()
       }
     } catch (err) {
       console.error('Accept request error:', err)
+      mutateRequests()
     }
   }
 
   const handleDeclineRequest = async (requestId: string) => {
+    mutateRequests(
+      (current: any) => ({
+        ...current,
+        incoming: (current?.incoming || []).filter((r: any) => r.id !== requestId)
+      }),
+      false
+    )
+
     try {
       await fetch(`/api/requests/${requestId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'decline' })
       })
-      fetchRequests()
+      mutateRequests()
     } catch (err) {
       console.error('Decline request error:', err)
+      mutateRequests()
     }
   }
 
@@ -395,14 +389,13 @@ export default function Home() {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
     } catch {}
-    setCurrentUser(null)
+    mutateSession({ user: null }, false)
     setSelectedConvId(null)
-    setConversations([])
     setMessages([])
   }
 
-  // If loading auth
-  if (authLoading) {
+  // If loading auth initial check
+  if (authLoading && !sessionData) {
     return (
       <div className="h-screen flex items-center justify-center p-4 bg-[#f8fafb]">
         <div className="flex items-center gap-2.5 text-xs text-[#5f6368]">
@@ -415,11 +408,19 @@ export default function Home() {
 
   // If not logged in -> Show Auth Screen
   if (!currentUser) {
-    return <AuthScreen onAuthSuccess={(user) => { setCurrentUser(user); fetchConversations(); fetchRequests() }} />
+    return (
+      <AuthScreen
+        onAuthSuccess={(user) => {
+          mutateSession({ user }, false)
+          mutateConversations()
+          mutateRequests()
+        }}
+      />
+    )
   }
 
   return (
-    <main className="h-screen flex flex-col max-w-6xl mx-auto p-2 sm:p-4 overflow-hidden">
+    <main className="h-[100dvh] flex flex-col max-w-6xl mx-auto p-1.5 sm:p-4 overflow-hidden">
       {/* Top Header */}
       <GoogleHeader
         currentUser={currentUser}
@@ -428,7 +429,7 @@ export default function Home() {
       />
 
       {/* Main App Body */}
-      <div className="flex-1 flex gap-3 sm:gap-4 min-h-0 overflow-hidden">
+      <div className="flex-1 flex gap-2 sm:gap-4 min-h-0 overflow-hidden">
         {/* Sidebar */}
         <div className={`w-full md:w-80 h-full shrink-0 ${mobileView === 'sidebar' ? 'flex' : 'hidden md:flex'}`}>
           <ChatSidebar
@@ -444,7 +445,7 @@ export default function Home() {
             onAcceptRequest={handleAcceptRequest}
             onDeclineRequest={handleDeclineRequest}
             onOpenCreateGroup={() => setShowCreateGroupModal(true)}
-            onRequestSent={fetchRequests}
+            onRequestSent={() => mutateRequests()}
           />
         </div>
 
@@ -538,7 +539,7 @@ export default function Home() {
       {showProfileModal && (
         <ProfileModal
           user={currentUser}
-          onSave={(updated) => setCurrentUser(updated)}
+          onSave={(updated) => mutateSession({ user: updated }, false)}
           onClose={() => setShowProfileModal(false)}
         />
       )}
@@ -547,7 +548,7 @@ export default function Home() {
         <CreateGroupModal
           currentUser={currentUser}
           onGroupCreated={(group) => {
-            fetchConversations()
+            mutateConversations()
             setSelectedConvId(group.id)
           }}
           onClose={() => setShowCreateGroupModal(false)}

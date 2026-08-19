@@ -38,19 +38,53 @@ export default function MessageInput({ onSendMessage, onTyping, placeholder }: M
     setShowEmojis(false)
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [compressing, setCompressing] = useState(false)
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       const isVideo = file.type.startsWith('video/')
       setMediaType(isVideo ? 'video' : 'image')
 
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setMediaUrl(event.target.result as string)
+      if (isVideo) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            setMediaUrl(event.target.result as string)
+          }
+        }
+        reader.readAsDataURL(file)
+      } else {
+        // Compress photo before converting to base64
+        setCompressing(true)
+        try {
+          const imageCompression = (await import('browser-image-compression')).default
+          const options = {
+            maxSizeMB: 0.2, // Compress to max 200KB
+            maxWidthOrHeight: 1280, // HD max dimension
+            useWebWorker: true
+          }
+          const compressedFile = await imageCompression(file, options)
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            if (event.target?.result) {
+              setMediaUrl(event.target.result as string)
+            }
+          }
+          reader.readAsDataURL(compressedFile)
+        } catch (err) {
+          console.warn('Image compression fallback to original:', err)
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            if (event.target?.result) {
+              setMediaUrl(event.target.result as string)
+            }
+          }
+          reader.readAsDataURL(file)
+        } finally {
+          setCompressing(false)
         }
       }
-      reader.readAsDataURL(file)
     }
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -96,34 +130,42 @@ export default function MessageInput({ onSendMessage, onTyping, placeholder }: M
 
       {/* Emoji Picker Popover */}
       {showEmojis && (
-        <div className="absolute bottom-full mb-2.5 left-0 p-3 md-card w-72 shadow-xl z-20 space-y-2.5">
-          <div className="flex items-center justify-between border-b border-[#e8eaed] pb-1.5">
-            <span className="text-xs font-semibold text-[#1f1f1f]">Emoji Keyboard</span>
-            <button onClick={() => setShowEmojis(false)} className="text-[#9aa0a6] hover:text-[#5f6368]">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        <>
+          {/* Backdrop for easy dismiss on mobile */}
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setShowEmojis(false)}
+          />
 
-          {EMOJI_CATEGORIES.map((cat) => (
-            <div key={cat.name} className="space-y-1">
-              <span className="text-[10px] font-medium text-[#5f6368] uppercase tracking-wider block">
-                {cat.name}
-              </span>
-              <div className="grid grid-cols-8 gap-1">
-                {cat.emojis.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => insertEmoji(emoji)}
-                    className="w-7 h-7 rounded-lg hover:bg-[#f1f4f8] flex items-center justify-center text-base transition-transform hover:scale-110"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
+          <div className="absolute bottom-full mb-2.5 left-0 p-3 md-card w-72 sm:w-80 max-w-[calc(100vw-2rem)] shadow-xl z-30 space-y-2.5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-[#e8eaed] pb-1.5">
+              <span className="text-xs font-semibold text-[#1f1f1f]">Emoji Keyboard</span>
+              <button onClick={() => setShowEmojis(false)} className="text-[#9aa0a6] hover:text-[#5f6368] p-1">
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
-          ))}
-        </div>
+
+            {EMOJI_CATEGORIES.map((cat) => (
+              <div key={cat.name} className="space-y-1">
+                <span className="text-[10px] font-medium text-[#5f6368] uppercase tracking-wider block">
+                  {cat.name}
+                </span>
+                <div className="grid grid-cols-8 gap-1">
+                  {cat.emojis.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => insertEmoji(emoji)}
+                      className="w-7 h-7 rounded-lg hover:bg-[#f1f4f8] flex items-center justify-center text-base transition-transform hover:scale-110 active:scale-125"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Main Composer */}

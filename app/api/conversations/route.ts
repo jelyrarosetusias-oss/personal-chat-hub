@@ -26,53 +26,60 @@ export async function GET() {
 
     const convIds = memberships.map((m) => m.conversation_id)
 
-    // 2. Fetch conversation details with all members
-    const { data: convs, error: cErr } = await supabase
-      .from('conversations')
-      .select(`
-        id,
-        type,
-        name,
-        avatar_url,
-        created_by,
-        created_at,
-        members:conversation_members(
-          role,
-          user:profiles(id, short_id, username, display_name, avatar_url, bio, is_online, last_active_at)
-        )
-      `)
-      .in('id', convIds)
-      .order('created_at', { ascending: false })
+    // 2. Parallel fetch: Fetch conversations with members AND latest messages in parallel
+    const [convsRes, msgsRes] = await Promise.all([
+      supabase
+        .from('conversations')
+        .select(`
+          id,
+          type,
+          name,
+          avatar_url,
+          created_by,
+          created_at,
+          members:conversation_members(
+            role,
+            user:profiles(id, short_id, username, display_name, avatar_url, bio, is_online, last_active_at)
+          )
+        `)
+        .in('id', convIds)
+        .order('created_at', { ascending: false }),
 
-    if (cErr) {
-      return NextResponse.json({ error: cErr.message }, { status: 500 })
+      supabase
+        .from('messages')
+        .select('id, conversation_id, content, sender_id, media_url, media_type, created_at, unsent')
+        .in('conversation_id', convIds)
+        .order('created_at', { ascending: false })
+        .limit(100)
+    ])
+
+    if (convsRes.error) {
+      return NextResponse.json({ error: convsRes.error.message }, { status: 500 })
     }
 
-    // 3. For each conversation, get the latest message
-    const formattedConvs = await Promise.all(
-      (convs || []).map(async (c: any) => {
-        const { data: lastMsg } = await supabase
-          .from('messages')
-          .select('id, content, sender_id, media_url, media_type, created_at, unsent')
-          .eq('conversation_id', c.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        const membersList = (c.members || []).map((m: any) => m.user).filter(Boolean)
-
-        return {
-          id: c.id,
-          type: c.type,
-          name: c.name,
-          avatar_url: c.avatar_url,
-          created_by: c.created_by,
-          created_at: c.created_at,
-          members: membersList,
-          last_message: lastMsg || null
+    // Build latest message map for fast O(1) lookup
+    const latestMsgMap: Record<string, any> = {}
+    if (msgsRes.data) {
+      for (const msg of msgsRes.data) {
+        if (!latestMsgMap[msg.conversation_id]) {
+          latestMsgMap[msg.conversation_id] = msg
         }
-      })
-    )
+      }
+    }
+
+    const formattedConvs = (convsRes.data || []).map((c: any) => {
+      const membersList = (c.members || []).map((m: any) => m.user).filter(Boolean)
+      return {
+        id: c.id,
+        type: c.type,
+        name: c.name,
+        avatar_url: c.avatar_url,
+        created_by: c.created_by,
+        created_at: c.created_at,
+        members: membersList,
+        last_message: latestMsgMap[c.id] || null
+      }
+    })
 
     // Sort by latest message or creation time
     formattedConvs.sort((a, b) => {

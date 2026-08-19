@@ -82,7 +82,7 @@ export default function MessageBubble({
       />
 
       {/* Bubble Container */}
-      <div className={`max-w-[80%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+      <div className={`max-w-[85%] sm:max-w-[65%] flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
         {/* Sender + Time */}
         <div className={`flex items-center gap-1.5 px-0.5 mb-1 text-[11px] ${isMine ? 'flex-row-reverse' : ''}`}>
           <span className="font-semibold text-[#3c4043]">{message.sender_name || 'User'}</span>
@@ -107,7 +107,7 @@ export default function MessageBubble({
               <div
                 className={`absolute bottom-full mb-2 ${
                   isMine ? 'right-0' : 'left-0'
-                } flex items-center gap-1 p-1.5 bg-white/95 backdrop-blur-md rounded-full border border-[#e8eaed] shadow-xl z-30 animate-in fade-in zoom-in-95 duration-150`}
+                } flex items-center gap-1 p-1.5 bg-white/95 backdrop-blur-md rounded-full border border-[#e8eaed] shadow-xl z-30 animate-in fade-in zoom-in-95 duration-150 max-w-[calc(100vw-2rem)] overflow-x-auto`}
                 onClick={(e) => e.stopPropagation()}
               >
                 {REACTION_EMOJIS.map((emoji) => {
@@ -164,7 +164,7 @@ export default function MessageBubble({
             <div onClick={handleBubbleClick} className="cursor-pointer transition-all active:scale-[0.99] select-none">
               {isVideo ? (
                 <div
-                  className="relative rounded-2xl overflow-hidden max-w-[280px] bg-black shadow-sm"
+                  className="relative rounded-2xl overflow-hidden max-w-[240px] xs:max-w-[280px] w-full bg-black shadow-sm"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <video
@@ -180,7 +180,7 @@ export default function MessageBubble({
                     e.stopPropagation()
                     setShowFullMedia(true)
                   }}
-                  className="relative cursor-pointer rounded-2xl overflow-hidden group/img max-w-[280px] shadow-sm"
+                  className="relative cursor-pointer rounded-2xl overflow-hidden group/img max-w-[240px] xs:max-w-[280px] w-full shadow-sm"
                 >
                   <img
                     src={message.media_url}
@@ -205,7 +205,7 @@ export default function MessageBubble({
               {/* Render Video Media (with text) */}
               {message.media_url && isVideo && (
                 <div
-                  className="relative rounded-xl overflow-hidden max-w-[280px] bg-black"
+                  className="relative rounded-xl overflow-hidden max-w-[240px] xs:max-w-[280px] w-full bg-black"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <video
@@ -224,7 +224,7 @@ export default function MessageBubble({
                     e.stopPropagation()
                     setShowFullMedia(true)
                   }}
-                  className="relative cursor-pointer rounded-xl overflow-hidden group/img max-w-[280px] border border-black/10"
+                  className="relative cursor-pointer rounded-xl overflow-hidden group/img max-w-[240px] xs:max-w-[280px] w-full border border-black/10"
                 >
                   <img
                     src={message.media_url}

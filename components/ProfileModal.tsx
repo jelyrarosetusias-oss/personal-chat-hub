@@ -55,8 +55,8 @@ export default function ProfileModal({ user, onSave, onClose }: ProfileModalProp
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fade-in">
-      <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-[#e8eaed] space-y-5 animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-fade-in">
+      <div className="w-full max-w-md bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-[#e8eaed] space-y-4 sm:space-y-5 animate-in fade-in zoom-in-95 duration-150 max-h-[90dvh] overflow-y-auto">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-[#1f1f1f]">Edit Profile</h2>
           <button
