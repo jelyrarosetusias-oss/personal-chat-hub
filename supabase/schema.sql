@@ -17,6 +17,7 @@ CREATE TABLE profiles (
   username TEXT NOT NULL UNIQUE,
   display_name TEXT NOT NULL,
   avatar_url TEXT DEFAULT 'https://api.dicebear.com/7.x/avataaars/svg?seed=default',
+  cover_url TEXT,
   bio TEXT DEFAULT '',
   is_online BOOLEAN DEFAULT false,
   last_active_at TIMESTAMPTZ DEFAULT now(),
@@ -108,6 +109,7 @@ CREATE TABLE IF NOT EXISTS post_likes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  reaction_type TEXT DEFAULT 'like' CHECK (reaction_type IN ('like', 'love', 'haha', 'wow', 'sad', 'angry')),
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(post_id, user_id)
 );

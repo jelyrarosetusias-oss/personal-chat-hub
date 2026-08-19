@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react'
 import { UserProfile, DEFAULT_AVATAR } from '@/lib/types'
-import { X, Upload, Trash2, Camera } from 'lucide-react'
+import { X, Upload, Trash2, Camera, ImagePlus } from 'lucide-react'
 
 interface ProfileModalProps {
   user: UserProfile
@@ -10,13 +10,17 @@ interface ProfileModalProps {
   onClose: () => void
 }
 
+const DEFAULT_COVER = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%231a73e8"/><stop offset="50%" stop-color="%238ab4f8"/><stop offset="100%" stop-color="%234285f4"/></linearGradient></defs><rect fill="url(%23g)" width="1200" height="400"/></svg>'
+
 export default function ProfileModal({ user, onSave, onClose }: ProfileModalProps) {
   const [displayName, setDisplayName] = useState(user.display_name)
   const [bio, setBio] = useState(user.bio || '')
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url || DEFAULT_AVATAR)
+  const [coverUrl, setCoverUrl] = useState(user.cover_url || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const coverInputRef = useRef<HTMLInputElement>(null)
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -39,6 +43,27 @@ export default function ProfileModal({ user, onSave, onClose }: ProfileModalProp
     }
   }
 
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      try {
+        const imageCompression = (await import('browser-image-compression')).default
+        const compressed = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1200, useWebWorker: true })
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) setCoverUrl(event.target.result as string)
+        }
+        reader.readAsDataURL(compressed)
+      } catch {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          if (event.target?.result) setCoverUrl(event.target.result as string)
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!displayName.trim()) return
@@ -52,7 +77,8 @@ export default function ProfileModal({ user, onSave, onClose }: ProfileModalProp
         body: JSON.stringify({
           display_name: displayName.trim(),
           bio: bio.trim(),
-          avatar_url: avatarUrl
+          avatar_url: avatarUrl,
+          cover_url: coverUrl || null
         })
       })
       const data = await res.json()
@@ -91,6 +117,50 @@ export default function ProfileModal({ user, onSave, onClose }: ProfileModalProp
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Cover Photo Customizer */}
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleCoverUpload}
+          />
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#3c4043]">Cover Photo</label>
+            <div className="relative rounded-2xl overflow-hidden border border-[#e8eaed] group">
+              <div className="h-28 w-full bg-gradient-to-r from-[#1a73e8] via-[#8ab4f8] to-[#4285f4]">
+                {coverUrl && (
+                  <img
+                    src={coverUrl}
+                    alt="Cover"
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => coverInputRef.current?.click()}
+                  className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-[#1f1f1f] text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <ImagePlus className="w-3.5 h-3.5" />
+                  <span>{coverUrl ? 'Change Cover' : 'Upload Cover'}</span>
+                </button>
+                {coverUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setCoverUrl('')}
+                    className="p-1.5 rounded-xl bg-white/90 hover:bg-[#fce8e6] text-[#d93025] shadow-sm transition-colors"
+                    title="Remove cover"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Avatar customizer */}
           <input
             ref={fileInputRef}

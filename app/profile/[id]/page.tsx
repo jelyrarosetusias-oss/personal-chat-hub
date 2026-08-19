@@ -20,7 +20,8 @@ import {
   Loader2,
   Share2,
   Check,
-  Copy
+  Copy,
+  Camera
 } from 'lucide-react'
 
 export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -127,9 +128,27 @@ export default function ProfilePage({ params }: { params: Promise<{ id: string }
       <div className="max-w-3xl mx-auto px-2 sm:px-4 pt-3 space-y-4">
         {/* Profile Card with Cover Banner */}
         <div className="bg-white rounded-3xl md-card border border-[#e8eaed] overflow-hidden shadow-xs">
-          {/* Cover Photo Banner (Gradient Mesh) */}
-          <div className="h-36 sm:h-48 w-full bg-gradient-to-r from-[#1a73e8] via-[#8ab4f8] to-[#4285f4] relative">
-            <div className="absolute inset-0 bg-black/10 backdrop-blur-[2px]" />
+          {/* Cover Photo Banner */}
+          <div className="h-36 sm:h-48 w-full relative overflow-hidden">
+            {profile.cover_url ? (
+              <img
+                src={profile.cover_url}
+                alt="Cover"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-r from-[#1a73e8] via-[#8ab4f8] to-[#4285f4]" />
+            )}
+            <div className="absolute inset-0 bg-black/10" />
+            {isOwnProfile && (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-[#1f1f1f] text-[11px] font-bold shadow-sm transition-colors backdrop-blur-sm"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{profile.cover_url ? 'Change Cover' : 'Add Cover Photo'}</span>
+              </button>
+            )}
           </div>
 
           {/* Profile Header Details */}

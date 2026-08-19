@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getSessionUser } from '@/lib/auth'
 
+const VALID_REACTIONS = ['like', 'love', 'haha', 'wow', 'sad', 'angry']
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSessionUser()
@@ -10,37 +12,56 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const { id: postId } = await params
+    const body = await req.json().catch(() => ({}))
+    const requestedReaction = body?.reaction_type && VALID_REACTIONS.includes(body.reaction_type)
+      ? body.reaction_type
+      : 'like'
+
     const supabase = getSupabaseAdmin()
     if (!supabase) {
       return NextResponse.json({ error: 'Database not available' }, { status: 500 })
     }
 
-    // Check if like exists
+    // Check if like / reaction exists
     const { data: existingLike } = await supabase
       .from('post_likes')
-      .select('id')
+      .select('id, reaction_type')
       .eq('post_id', postId)
       .eq('user_id', session.userId)
       .maybeSingle()
 
     let liked = false
+    let currentReaction: string | null = null
 
     if (existingLike) {
-      // Unlike
-      await supabase
-        .from('post_likes')
-        .delete()
-        .eq('id', existingLike.id)
-      liked = false
+      if (existingLike.reaction_type === requestedReaction && !body?.force_set) {
+        // Toggle off (unlike)
+        await supabase
+          .from('post_likes')
+          .delete()
+          .eq('id', existingLike.id)
+        liked = false
+        currentReaction = null
+      } else {
+        // Change reaction type (e.g. from like to love)
+        await supabase
+          .from('post_likes')
+          .update({ reaction_type: requestedReaction })
+          .eq('id', existingLike.id)
+        liked = true
+        currentReaction = requestedReaction
+      }
     } else {
-      // Like
+      // New reaction
       await supabase
         .from('post_likes')
         .insert({
           post_id: postId,
-          user_id: session.userId
+          user_id: session.userId,
+          reaction_type: requestedReaction
         })
       liked = true
+      currentReaction = requestedReaction
 
       // Trigger notification for post author (if not self-like)
       try {
@@ -63,19 +84,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Fetch total likes count
-    const { count } = await supabase
+    // Fetch all likes and compute reaction breakdown
+    const { data: allLikes } = await supabase
       .from('post_likes')
-      .select('*', { count: 'exact', head: true })
+      .select('reaction_type')
       .eq('post_id', postId)
+
+    const breakdown: Record<string, number> = {}
+    if (allLikes) {
+      for (const row of allLikes) {
+        const rType = row.reaction_type || 'like'
+        breakdown[rType] = (breakdown[rType] || 0) + 1
+      }
+    }
 
     return NextResponse.json({
       success: true,
       liked,
-      likes_count: count || 0
+      my_reaction: currentReaction,
+      likes_count: allLikes?.length || 0,
+      reactions_breakdown: breakdown
     })
   } catch (err: any) {
-    console.error('Post like toggle error:', err)
+    console.error('Post reaction toggle error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

@@ -215,7 +215,7 @@ export default function NotificationBell({ currentUserId }: NotificationBellProp
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
 
-          <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-1.5rem)] bg-white rounded-3xl shadow-2xl border border-[#e8eaed] overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+          <div className="fixed sm:absolute top-14 sm:top-full sm:mt-2 left-2 right-2 sm:left-auto sm:right-0 sm:w-96 bg-white rounded-3xl shadow-2xl border border-[#e8eaed] overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[80vh] sm:max-h-[85vh]">
             {/* Header */}
             <div className="p-3.5 px-4 border-b border-[#f1f4f8] flex items-center justify-between bg-white shrink-0">
               <div className="flex items-center gap-2">

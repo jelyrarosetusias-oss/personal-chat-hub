@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // 1. Fetch user profile
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('id, short_id, username, display_name, avatar_url, bio, is_admin, is_online, last_active_at, created_at')
+      .select('id, short_id, username, display_name, avatar_url, cover_url, bio, is_admin, is_online, last_active_at, created_at')
       .eq('id', userId)
       .single()
 

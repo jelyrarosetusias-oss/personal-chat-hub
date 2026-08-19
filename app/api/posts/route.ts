@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     // 2. Parallel queries
     const [likesRes, commentsRes, repostRowsRes, repostTargetsRes] = await Promise.all([
-      supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds),
+      supabase.from('post_likes').select('post_id, user_id, reaction_type').in('post_id', postIds),
       supabase.from('post_comments').select('id, post_id').in('post_id', postIds),
       supabase.from('posts').select('repost_of_id').in('repost_of_id', postIds),
       repostTargetIds.length > 0
@@ -64,16 +64,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 5. Index likes
-    const likesMap: Record<string, { count: number; isLiked: boolean }> = {}
+    // 5. Index likes + reactions breakdown
+    const likesMap: Record<string, { count: number; isLiked: boolean; myReaction: string | null; breakdown: Record<string, number> }> = {}
     if (likesRes.data) {
-      for (const row of likesRes.data) {
+      for (const row of likesRes.data as any[]) {
         if (!likesMap[row.post_id]) {
-          likesMap[row.post_id] = { count: 0, isLiked: false }
+          likesMap[row.post_id] = { count: 0, isLiked: false, myReaction: null, breakdown: {} }
         }
         likesMap[row.post_id].count++
+        const rType = row.reaction_type || 'like'
+        likesMap[row.post_id].breakdown[rType] = (likesMap[row.post_id].breakdown[rType] || 0) + 1
         if (session?.userId && row.user_id === session.userId) {
           likesMap[row.post_id].isLiked = true
+          likesMap[row.post_id].myReaction = rType
         }
       }
     }
@@ -115,7 +118,7 @@ export async function GET(req: NextRequest) {
 
     // 9. Format posts response
     const formattedPosts = posts.map((p: any) => {
-      const likeInfo = likesMap[p.id] || { count: 0, isLiked: false }
+      const likeInfo = likesMap[p.id] || { count: 0, isLiked: false, myReaction: null, breakdown: {} }
       const author = profileMap[p.author_id] || {
         id: p.author_id,
         display_name: 'User',
@@ -138,6 +141,8 @@ export async function GET(req: NextRequest) {
         repost_of_id: p.repost_of_id,
         repost_of: p.repost_of_id ? repostTargetMap[p.repost_of_id] || null : null,
         likes_count: likeInfo.count,
+        reactions_breakdown: likeInfo.breakdown,
+        my_reaction: likeInfo.myReaction,
         comments_count: commentsCountMap[p.id] || 0,
         reposts_count: repostCounts[p.id] || 0,
         is_liked_by_me: likeInfo.isLiked,
@@ -261,6 +266,8 @@ export async function POST(req: NextRequest) {
       },
       repost_of: repostTarget,
       likes_count: 0,
+      reactions_breakdown: {},
+      my_reaction: null,
       comments_count: 0,
       reposts_count: 0,
       is_liked_by_me: false

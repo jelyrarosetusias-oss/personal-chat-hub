@@ -6,6 +6,7 @@ export interface UserProfile {
   username: string
   display_name: string
   avatar_url: string
+  cover_url?: string | null
   bio?: string
   is_online?: boolean
   last_active_at?: string
@@ -68,6 +69,8 @@ export interface MessageRequest {
 }
 
 // ─── SOCIAL FEED TYPES ───
+export type PostReactionType = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angry'
+
 export interface Post {
   id: string
   author_id: string
@@ -79,6 +82,8 @@ export interface Post {
   repost_of_id?: string | null
   repost_of?: Post | null
   likes_count: number
+  reactions_breakdown?: Record<string, number>
+  my_reaction?: PostReactionType | null
   comments_count: number
   reposts_count: number
   is_liked_by_me?: boolean
@@ -101,8 +106,10 @@ export interface PostLike {
   id: string
   post_id: string
   user_id: string
+  reaction_type?: PostReactionType
   created_at: string
 }
+
 
 // ─── NOTIFICATION TYPES ───
 export type NotificationType = 'like' | 'comment' | 'reply' | 'repost' | 'message'
