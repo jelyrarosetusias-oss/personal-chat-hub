@@ -261,6 +261,7 @@ export default function GoogleHeader({
             </div>
           </>
         )}
+        </div>
       </div>
     </header>
   )
